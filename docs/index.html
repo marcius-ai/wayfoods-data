@@ -343,7 +343,17 @@ async function carregarDados(){
   try {
     const resp = await fetch(url + '?t=' + Date.now()); // cache bust
     if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const dados = await resp.json();
+    const dadosRaw = await resp.json();
+    // Converter campos de string para array se necessário (compatibilidade com fluxo v2)
+    const dados = {};
+    const camposArray = ['receitas','ingredientesReceita','insumos','estoquePorcionamentos','estoqueDiario','ordensProducao','fornecedores','compras','despesas','planoDeContas'];
+    for (const k of Object.keys(dadosRaw)) {
+      if (camposArray.includes(k) && typeof dadosRaw[k] === 'string') {
+        try { dados[k] = JSON.parse(dadosRaw[k]); } catch(e) { dados[k] = dadosRaw[k]; }
+      } else {
+        dados[k] = dadosRaw[k];
+      }
+    }
 
     // Mapear receitas diretamente do JSON
     // receitas[]: cod, nome, marca, cat, rend, unidRend, porcao, prep
