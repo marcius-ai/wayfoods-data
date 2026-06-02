@@ -364,9 +364,10 @@ async function carregarDados(){
       // marca pode vir como string simples, array separado por ;#, ou array SP (field_2)
       let marcaRaw = r.marca || '';
       if (!marcaRaw && r.field_2) {
-        if (Array.isArray(r.field_2)) marcaRaw = r.field_2.map(m => m.Value || m).join(';#');
-        else marcaRaw = r.field_2;
+        if (Array.isArray(r.field_2)) marcaRaw = r.field_2.map(m => m.Value || String(m)).join(';#');
+        else marcaRaw = String(r.field_2);
       }
+      marcaRaw = String(marcaRaw);
       const marcas = marcaRaw.includes(';#')
         ? marcaRaw.split(';#').map(m=>m.trim()).filter(Boolean)
         : (marcaRaw ? [marcaRaw] : []);
