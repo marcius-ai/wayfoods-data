@@ -623,10 +623,11 @@ function carregarKit(){
   limpar();
   if(!kit){itensEl.style.display='none';qtdFld.style.display='none';sel.clear();renderSelCards();chkBtn();return;}
 
-  // Marca todos os preparos fixos do kit
+  // Marca todos os preparos fixos do kit (inclui preparos base)
+  const PPALL=()=>[...PP,...PP_BASE];
   sel.clear();
   kit.f.forEach(cod=>{
-    const p=PP.find(x=>x.cod===cod);
+    const p=PPALL().find(x=>x.cod===cod);
     if(p) sel.set(cod,1);
   });
 
@@ -634,7 +635,7 @@ function carregarKit(){
   let html='';
   if(kit.v&&kit.v.length>0){
     kit.v.forEach((v,i)=>{
-      const ops=PP.filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+      const ops=[...PP,...PP_BASE].filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
       html+=`<div class="kit-item" style="align-items:flex-start;flex-direction:column;gap:6px">
         <div style="display:flex;align-items:center;gap:8px">
           <div class="kit-n">${i+1}</div>
@@ -666,21 +667,24 @@ function renderKitCards(){
   if(!sel.size){area.style.display='none';return;}
   area.style.display='block';
   cards.innerHTML=[...sel.keys()].map(cod=>{
-    const p=PP.find(x=>x.cod===cod);
+    const p=[...PP,...PP_BASE].find(x=>x.cod===cod);
     if(!p)return'';
     const qtd=typeof sel.get(cod)==='number'&&sel.get(cod)>0?sel.get(cod):'';
-    const pLabel=p.porcao&&p.porcao!=='—'?`${p.porcao}`:'';
+    // Preparo base: placeholder em kg, avulso: em porções
+    const isBase=!p.porcaoG||!p.porcao||p.porcao==='—';
+    const pLabel=isBase?`${p.rend} ${p.unidRend}/receita`:(p.porcao&&p.porcao!=='—'?`${p.porcao}`:'');
+    const ph=isBase?'kg':'porções';
     return`<div class="sc">
       <div class="sc-nome" title="${p.nome}">${p.nome}</div>
-      <div class="sc-qtd-wrap"><input class="sc-qtd" type="number" min="1" placeholder="0" value="${qtd}" oninput="setKitQtd('${cod}',this.value)"></div>
+      <div class="sc-qtd-wrap"><input class="sc-qtd" type="number" min="0.1" step="${isBase?'0.5':'1'}" placeholder="${ph}" value="${qtd}" oninput="setKitQtd('${cod}',this.value,${isBase})"></div>
       <div class="sc-porcao">${pLabel}</div>
       <div class="sc-del-wrap"><button class="sc-del" onclick="removeKitItem('${cod}')">✕</button></div>
     </div>`;
   }).join('');
 }
 
-function setKitQtd(cod,v){
-  sel.set(cod,parseInt(v)||0);
+function setKitQtd(cod,v,isBase){
+  sel.set(cod,isBase?(parseFloat(v)||0):(parseInt(v)||0));
   limpar();chkBtn();
 }
 
@@ -782,8 +786,17 @@ function gerar(){
     });
   } else {
     sel.forEach((qtd,cod)=>{
-      const p=PP.find(x=>x.cod===cod);
-      if(p&&qtd>0) secoes.push({p,qtd,fat:fator(p,qtd),nr:nrec(p,qtd)});
+      // Busca em PP e PP_BASE
+      const p=[...PP,...PP_BASE].find(x=>x.cod===cod);
+      if(!p||!qtd||qtd<=0) return;
+      const isBase=!p.porcaoG||!p.porcao||p.porcao==='—';
+      if(isBase){
+        // qtd está em kg — mesmo tratamento do modo base
+        const nReceitas=p.rend>0?qtd/p.rend:1;
+        secoes.push({p,qtd,fat:nReceitas,nr:nReceitas.toFixed(1).replace('.',','),base:true});
+      } else {
+        secoes.push({p,qtd,fat:fator(p,qtd),nr:nrec(p,qtd)});
+      }
     });
   }
 
@@ -962,3 +975,4 @@ function gerar(){
 </script>
 </body>
 </html>
+
