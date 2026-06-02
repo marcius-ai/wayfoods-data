@@ -355,9 +355,16 @@ async function carregarDados(){
       }
     }
 
+    // Indexar ingredientesReceita por ReceitaCodigo (suporte ao formato SP bruto)
+    const ingsPorReceita = {};
+    (dados.ingredientesReceita || []).forEach(ing => {
+      const recCod = (ing.ReceitaCodigo && ing.ReceitaCodigo.Value) || ing.ReceitaCodigo || '';
+      if (!recCod) return;
+      if (!ingsPorReceita[recCod]) ingsPorReceita[recCod] = [];
+      ingsPorReceita[recCod].push(ing);
+    });
+
     // Mapear receitas diretamente do JSON
-    // receitas[]: cod, nome, marca, cat, rend, unidRend, porcao, prep
-    // receitas[].ings[]: Title=cod, field_2=ingrediente, field_3=unidade, field_4=qtd
     PP = (dados.receitas || []).map(r => {
       const porcaoStr = r.porcao || r.field_7 || '';
       const porcaoG = parseFloat(porcaoStr) || 0;
@@ -382,14 +389,14 @@ async function carregarDados(){
         porcao: porcaoStr,
         porcaoG,
         prep: r.prep || r.field_8 || '',
-        ings: (r.ings || []).filter(ing => {
+        ings: (r.ings || ingsPorReceita[r.cod || r.Title] || []).filter(ing => {
           const nome = (ing.CodCatalogo_x003a__x0020_Nome && ing.CodCatalogo_x003a__x0020_Nome.Value) || ing.field_2 || '';
           return !!nome;
         }).map(ing => {
           const nome = (ing.CodCatalogo_x003a__x0020_Nome && ing.CodCatalogo_x003a__x0020_Nome.Value) || ing.field_2 || '';
-          const unid = (ing.field_3 && ing.field_3.Value !== undefined ? ing.field_3.Value : null) || ing.field_3 || '';
+          const unid = (ing.field_3 && ing.field_3.Value !== undefined ? ing.field_3.Value : (typeof ing.field_3 === 'string' ? ing.field_3 : '')) || '';
           const qtd = parseFloat(ing.QtdeLiquida) || parseFloat(ing.field_4) || 0;
-          const tipo = (ing.field_5 && ing.field_5.Value) || 'Insumo';
+          const tipo = (ing.field_5 && ing.field_5.Value) || (typeof ing.field_5 === 'string' ? ing.field_5 : 'Insumo');
           return { i: nome, q: qtd, u: unid, o: ing.Observacao || '', t: tipo };
         })
       };
