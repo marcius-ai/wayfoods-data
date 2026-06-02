@@ -376,9 +376,9 @@ async function carregarDados(){
         nome: r.nome || r.field_1 || '',
         marca: marcas[0] || '',   // exibição usa a primeira
         marcas,                    // array completo para filtro
-        cat: r.cat || r.field_3 || 'Geral',
+        cat: r.cat || (r.field_3 && r.field_3.Value ? r.field_3.Value : r.field_3) || 'Geral',
         rend: parseFloat(r.rend || r.field_4) || 0,
-        unidRend: r.unidRend || r.field_5 || 'kg',
+        unidRend: r.unidRend || (r.field_5 && r.field_5.Value ? r.field_5.Value : r.field_5) || 'kg',
         porcao: porcaoStr,
         porcaoG,
         prep: r.prep || r.field_8 || '',
