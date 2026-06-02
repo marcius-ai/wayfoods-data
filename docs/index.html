@@ -359,24 +359,28 @@ async function carregarDados(){
     // receitas[]: cod, nome, marca, cat, rend, unidRend, porcao, prep
     // receitas[].ings[]: Title=cod, field_2=ingrediente, field_3=unidade, field_4=qtd
     PP = (dados.receitas || []).map(r => {
-      const porcaoStr = r.porcao || '';
+      const porcaoStr = r.porcao || r.field_7 || '';
       const porcaoG = parseFloat(porcaoStr) || 0;
-      // marca pode ser string simples ou array separado por ;#
-      const marcaRaw = r.marca || '';
+      // marca pode vir como string simples, array separado por ;#, ou array SP (field_2)
+      let marcaRaw = r.marca || '';
+      if (!marcaRaw && r.field_2) {
+        if (Array.isArray(r.field_2)) marcaRaw = r.field_2.map(m => m.Value || m).join(';#');
+        else marcaRaw = r.field_2;
+      }
       const marcas = marcaRaw.includes(';#')
         ? marcaRaw.split(';#').map(m=>m.trim()).filter(Boolean)
-        : [marcaRaw];
+        : (marcaRaw ? [marcaRaw] : []);
       return {
-        cod: r.cod || '',
-        nome: r.nome || '',
+        cod: r.cod || r.Title || '',
+        nome: r.nome || r.field_1 || '',
         marca: marcas[0] || '',   // exibição usa a primeira
         marcas,                    // array completo para filtro
-        cat: r.cat || 'Geral',
-        rend: parseFloat(r.rend) || 0,
-        unidRend: r.unidRend || 'kg',
+        cat: r.cat || r.field_3 || 'Geral',
+        rend: parseFloat(r.rend || r.field_4) || 0,
+        unidRend: r.unidRend || r.field_5 || 'kg',
         porcao: porcaoStr,
         porcaoG,
-        prep: r.prep || '',
+        prep: r.prep || r.field_8 || '',
         ings: (r.ings || []).filter(ing => {
           const nome = (ing.CodCatalogo_x003a__x0020_Nome && ing.CodCatalogo_x003a__x0020_Nome.Value) || ing.field_2 || '';
           return !!nome;
