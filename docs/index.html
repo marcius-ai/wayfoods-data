@@ -310,6 +310,7 @@ let sel = new Map();
 let selBase = new Map();
 let lista = [];
 let listaBase = [];
+let INSUMOS = [];
 
 // ── Tela de carregamento ───────────────────────────────────────────────────
 function mostrarLoading(msg){
@@ -424,6 +425,7 @@ async function carregarDados(){
       "Yaki Way":{f:["REC-035","REC-040","REC-041","REC-034"],v:[{l:"Yakisoba (sabor)",m:"Yaki Way",c:"Proteínas"}]}
     };
 
+    INSUMOS = dados.insumos || [];
     lista = [...PP];
     inicializarApp();
     esconderLoading();
@@ -947,7 +949,7 @@ function gerar(){
 
   // Índice categoria por nome de insumo
   const insIdx={};
-  (dados.insumos||[]).forEach(ins=>{
+  (INSUMOS||[]).forEach(ins=>{
     const n=(ins.field_1||'').toLowerCase().trim();
     const c=(ins.field_2&&ins.field_2.Value)?ins.field_2.Value:'Outros';
     insIdx[n]=c;
