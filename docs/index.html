@@ -966,21 +966,22 @@ function gerar(){
   let lcLinhas='';
   let catAtual='';
   let rowIdx=0;
-  itensRaw.forEach(it=>{
+  itensRaw.forEach(function(it){
     if(it.cat!==catAtual){
       catAtual=it.cat;
-      lcLinhas+=`<div class="lc-cat-hdr">${catAtual}</div>`;
+      lcLinhas+='<div class="lc-cat-hdr">'+catAtual+'</div>';
       rowIdx=0;
     }
-    const fb=fromBase(it.v,it.u);
-    const fmtV=(v,u)=>fmtN(v,true,u);
-    const prepsUniq=[...new Set(it.preps)];
-    const badge=prepsUniq.length>1?`<span class="lc-badge">${prepsUniq.length}x</span>`:'';
-    lcLinhas+=`<div class="lc-row" style="${rowIdx%2===1?'background:#faf8f5':''}">
-      <div class="lc-ing">${it.nome}${badge}</div>
-      <div class="lc-qtd">${fmtV(fb.v,fb.u)}</div>
-      <div class="lc-unid">${fb.u}</div>
-    </div>`;
+    var fb=fromBase(it.v,it.u);
+    var fmtV=function(v,u){return fmtN(v,true,u);};
+    var prepsUniq=[...new Set(it.preps)];
+    var badge=prepsUniq.length>1?'<span class="lc-badge">'+prepsUniq.length+'x</span>':'';
+    var bg=rowIdx%2===1?'background:#faf8f5':'';
+    lcLinhas+='<div class="lc-row" style="'+bg+'">'
+      +'<div class="lc-ing">'+it.nome+badge+'</div>'
+      +'<div class="lc-qtd">'+fmtV(fb.v,fb.u)+'</div>'
+      +'<div class="lc-unid">'+fb.u+'</div>'
+      +'</div>';
     rowIdx++;
   });
 
