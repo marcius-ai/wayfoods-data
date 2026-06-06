@@ -131,6 +131,7 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
 .lc-badge{background:#e8f4e8;color:var(--verde2);border-radius:10px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle}
 .lc-qtd{text-align:right;font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--verde2)}
 .lc-unid{text-align:right;font-size:11px;color:var(--sub);font-family:'DM Mono',monospace}
+.lc-cat-hdr{padding:7px 14px 5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--verde2);background:var(--bg2);border-top:2px solid var(--verde2);border-bottom:1px solid var(--borda);margin-top:2px}
 .lc-ftr{padding:10px 16px;background:var(--verde2);display:flex;justify-content:space-between}
 .lc-ftr span{font-size:11px;color:rgba(255,255,255,.45);font-family:'DM Mono',monospace}
 
@@ -187,6 +188,7 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
   .lc-row:nth-child(even){background:#f5f5f5!important}
   .lc-ing{font-size:11px!important;color:#000!important;font-weight:500}
   .lc-badge{background:#333!important;color:#fff!important;border-radius:8px;padding:1px 6px;font-size:9px!important;font-weight:700;margin-left:5px;vertical-align:middle}
+  .lc-cat-hdr{padding:5px 12px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#000!important;background:#e8e8e8!important;border-top:1.5px solid #555;border-bottom:1px solid #aaa;margin-top:1px}
   .lc-qtd{text-align:right;font-size:13px!important;font-weight:700;color:#000!important}
   .lc-unid{text-align:right;font-size:10px!important;color:#444!important;font-weight:600}
   .lc-ftr{display:flex!important;justify-content:space-between;background:#222!important;padding:7px 14px}
@@ -943,21 +945,44 @@ function gerar(){
     });
   });
 
-  const itens=[...mapa.values()].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+  // Índice categoria por nome de insumo
+  const insIdx={};
+  (dados.insumos||[]).forEach(ins=>{
+    const n=(ins.field_1||'').toLowerCase().trim();
+    const c=(ins.field_2&&ins.field_2.Value)?ins.field_2.Value:'Outros';
+    insIdx[n]=c;
+  });
+  const CAT_ORDER=['Carnes e Proteinas','Hortifruti','Frios e Laticinios','Secos e Molhos',
+                   'Bebidas','Embalagens e Descartaveis','Limpeza e Higiene','EPI e Uniforme','Outros'];
+  const itensRaw=[...mapa.values()].map(it=>({...it,cat:insIdx[it.nome.toLowerCase().trim()]||'Outros'}));
+  itensRaw.sort((a,b)=>{
+    const oa=CAT_ORDER.indexOf(a.cat)<0?99:CAT_ORDER.indexOf(a.cat);
+    const ob=CAT_ORDER.indexOf(b.cat)<0?99:CAT_ORDER.indexOf(b.cat);
+    if(oa!==ob)return oa-ob;
+    return a.nome.localeCompare(b.nome,'pt-BR');
+  });
+  const itens=itensRaw;
   const paraDesc=secoes.map(s=>`${s.p.nome} (${s.qtd} porções)`).join(', ');
-
-  const lcLinhas=itens.map((it,i)=>{
+  let lcLinhas='';
+  let catAtual='';
+  let rowIdx=0;
+  itensRaw.forEach(it=>{
+    if(it.cat!==catAtual){
+      catAtual=it.cat;
+      lcLinhas+=`<div class="lc-cat-hdr">${catAtual}</div>`;
+      rowIdx=0;
+    }
     const fb=fromBase(it.v,it.u);
-    let vS=fb.v,uS=fb.u;
     const fmtV=(v,u)=>fmtN(v,true,u);
     const prepsUniq=[...new Set(it.preps)];
     const badge=prepsUniq.length>1?`<span class="lc-badge">${prepsUniq.length}x</span>`:'';
-    return`<div class="lc-row" style="${i%2===1?'background:#faf8f5':''}">
+    lcLinhas+=`<div class="lc-row" style="${rowIdx%2===1?'background:#faf8f5':''}">
       <div class="lc-ing">${it.nome}${badge}</div>
-      <div class="lc-qtd">${fmtV(vS,uS)}</div>
-      <div class="lc-unid">${uS}</div>
+      <div class="lc-qtd">${fmtV(fb.v,fb.u)}</div>
+      <div class="lc-unid">${fb.u}</div>
     </div>`;
-  }).join('');
+    rowIdx++;
+  });
 
   document.getElementById('lc').innerHTML=`
     <div class="lc-hdr">
