@@ -92,7 +92,7 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
 .r-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .r-marca{font-size:10px;letter-spacing:.8px;text-transform:uppercase;opacity:.65;color:#fff;margin-bottom:4px}
 .r-nome{font-size:20px;font-weight:700;color:#fff;line-height:1.2}
-.r-tags{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.r-tags{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.rec-print-ftr{display:none}
 .r-tag{background:rgba(255,255,255,.18);border-radius:6px;padding:4px 10px;font-size:11px;color:#fff}
 .r-caixa{background:rgba(255,255,255,.18);border-radius:10px;padding:9px 14px;text-align:center;min-width:62px;flex-shrink:0}
 .r-caixa-n{color:var(--laranja);font-size:24px;font-weight:700;line-height:1}
@@ -139,7 +139,7 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
 .btn-imp{display:none;width:100%;margin-top:14px;padding:14px;border-radius:12px;border:none;background:var(--verde);color:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer}
 
 /* PRINT */
-@page{margin:15mm 12mm}@media print{
+@page{margin:15mm 12mm}@media print{.rec-print-ftr{display:block!important;font-size:8px;color:#888;text-align:right;padding:6px 12px 2px;border-top:1px solid #ddd;margin-top:4px}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   body{background:#fff;font-family:Arial,sans-serif;font-size:10px}
   .hdr,.wrap>.card,.btn-imp,.tabs,.r-hdr,.r-ftr{display:none!important}
@@ -822,11 +822,21 @@ function gerar(){
   const totalQtd = [...sel.values()].reduce((a,b)=>a+b,0);
 
   // ── HTML DO RESULTADO ──
-  let tags=`<div class="r-tag">${dt}</div>`;
-  if(secoes.length>1) tags=`<div class="r-tag">${secoes.length} preparos</div>`+tags;
+  let tags='';
+  if(secoes.length>1) tags=`<div class="r-tag">${secoes.length} preparos</div><div class="r-tag">${dt}</div>`;
   if(secoes.length===1){
-    if(secoes[0].nr) tags=`<div class="r-tag">Receitas: ${secoes[0].nr}x</div>`+tags;
-    if(secoes[0].p.porcao) tags=`<div class="r-tag">${secoes[0].p.porcao}/un</div>`+tags;
+    // Rendimento total = qtd * porcaoG (em kg se >= 1000g)
+    const _p=secoes[0].p, _q=secoes[0].qtd;
+    let rendTotalTag='';
+    if(_p.porcaoG&&_p.porcaoG>0&&_q>0){
+      const rendG=_q*_p.porcaoG;
+      rendTotalTag=rendG>=1000?(rendG/1000).toFixed(2).replace('.',',')+' kg':rendG+' g';
+    } else if(_p.rend&&_p.rend>0){
+      rendTotalTag=_p.rend+' '+(_p.unidRend||'');
+    }
+    if(rendTotalTag) tags+=`<div class="r-tag">${rendTotalTag}</div>`;
+    if(_p.porcao&&_p.porcao!=='—') tags+=`<div class="r-tag">${_p.porcao}/un</div>`;
+    if(secoes[0].nr) tags+=`<div class="r-tag">${secoes[0].nr} receitas</div>`;
   }
 
   const secoesHTML = secoes.map(s=>{
@@ -856,16 +866,22 @@ function gerar(){
       <div class="ing-hdr"><div>Ingrediente</div><div style="text-align:right">Qtd</div><div style="text-align:right">Unid</div></div>
       ${linhas}
       ${prepHtml}
+      <div class="rec-print-ftr">Way Foods &middot; ${s.p.marca} &middot; ${dt}</div>
     </div>`;
   }).join('');
 
   // Gera cabeçalho de impressão por seção
   function recHdr(s){
     const tagsArr=[];
-    if(s.qtd) tagsArr.push(s.qtd+' porções');
-    if(s.nr) tagsArr.push(s.nr+' receitas');
+    // Rendimento total
+    if(s.p.porcaoG&&s.p.porcaoG>0&&s.qtd>0){
+      const rendG=s.qtd*s.p.porcaoG;
+      tagsArr.push(rendG>=1000?(rendG/1000).toFixed(2).replace('.',',')+' kg':rendG+' g');
+    } else if(s.p.rend&&s.p.rend>0){
+      tagsArr.push(s.p.rend+' '+(s.p.unidRend||''));
+    }
     if(s.p.porcao&&s.p.porcao!=='—') tagsArr.push(s.p.porcao+'/un');
-    tagsArr.push(dt);
+    if(s.nr) tagsArr.push(s.nr+' receitas');
     const tagsHtml=tagsArr.map(t=>`<span class="rec-hdr-tag">${t}</span>`).join('');
     return`<div class="rec-hdr">
       <div class="rec-hdr-logo">${logoIMG}</div>
