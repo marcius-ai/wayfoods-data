@@ -368,7 +368,7 @@ async function carregarDados(){
     });
 
     // Mapear receitas diretamente do JSON
-    PP = (dados.receitas || []).map(r => {
+    PP = (dados.receitas || []).filter(r => r.Ativa !== false).map(r => {
       const porcaoStr = r.porcao || r.field_7 || '';
       const porcaoG = parseFloat(porcaoStr) || 0;
       // marca pode vir como string simples, array separado por ;#, ou array SP (field_2)
