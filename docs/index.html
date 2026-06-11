@@ -273,12 +273,14 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
         <select id="s-kit" onchange="carregarKit()"><option value="">Selecione o kit...</option></select>
       </div>
       <div id="kit-itens" style="display:none"></div>
-      <div id="kit-sel-area" style="display:none">
-        <label class="lbl">Quantidade por preparo *</label>
+      <div id="aplicar-todos-wrap" style="display:none;margin-bottom:8px">
         <div class="aplicar-todos">
           <input id="input-todos" class="sc-qtd" type="number" min="1" step="1" placeholder="Ex: 40" style="width:80px;font-size:14px;padding:6px 8px">
           <button onclick="aplicarTodos()" class="btn-aplicar-todos">Aplicar para todos</button>
         </div>
+      </div>
+      <div id="kit-sel-area" style="display:none">
+        <label class="lbl">Quantidade por preparo *</label>
         <div class="sel-cards" id="kit-sel-cards"></div>
       </div>
       <div class="fld" id="kit-qtd-fld" style="display:none;margin-top:14px">
@@ -517,6 +519,8 @@ function renderSelCardsBase(){
   const cards=document.getElementById('sel-cards-base');
   if(!selBase.size){area.style.display='none';return;}
   area.style.display='block';
+  const wrap=document.getElementById('aplicar-todos-wrap');
+  if(wrap) wrap.style.display='block';
   cards.innerHTML=[...selBase.keys()].map(cod=>{
     const p=PP_BASE.find(x=>x.cod===cod);
     if(!p)return'';
@@ -587,8 +591,10 @@ function toggle(cod){
 function renderSelCards(){
   const area=document.getElementById('sel-area');
   const cards=document.getElementById('sel-cards');
-  if(!sel.size){area.style.display='none';return;}
+  if(!sel.size){area.style.display='none';const w=document.getElementById('aplicar-todos-wrap');if(w)w.style.display='none';return;}
   area.style.display='block';
+  const wrap=document.getElementById('aplicar-todos-wrap');
+  if(wrap) wrap.style.display='block';
   cards.innerHTML=[...sel.entries()].map(([cod,qtd])=>{
     const p=PP.find(x=>x.cod===cod);
     if(!p)return'';
@@ -675,8 +681,10 @@ function carregarKit(){
 function renderKitCards(){
   const area=document.getElementById('kit-sel-area');
   const cards=document.getElementById('kit-sel-cards');
-  if(!sel.size){area.style.display='none';return;}
+  if(!sel.size){area.style.display='none';const w=document.getElementById('aplicar-todos-wrap');if(w)w.style.display='none';return;}
   area.style.display='block';
+  const wrap=document.getElementById('aplicar-todos-wrap');
+  if(wrap) wrap.style.display='block';
   cards.innerHTML=[...sel.keys()].map(cod=>{
     const p=[...PP,...PP_BASE].find(x=>x.cod===cod);
     if(!p)return'';
