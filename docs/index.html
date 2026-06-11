@@ -660,7 +660,7 @@ function carregarKit(){
             <div class="kit-n">${i+1}</div>
             <span style="font-size:13px;font-weight:500">${v.l}</span>
           </div>
-          <button onclick="selecionarTodosGrupo('${grpId}')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--verde2);background:transparent;color:var(--verde2);cursor:pointer;font-weight:600">Selecionar todos</button>
+          <button id="btn-${grpId}" onclick="toggleGrupo('${grpId}')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--verde2);background:transparent;color:var(--verde2);cursor:pointer;font-weight:600">Selecionar todos</button>
         </div>
         <div class="kit-multi" style="width:100%" id="${grpId}">
           <div class="kit-multi-scroll">
@@ -706,17 +706,38 @@ function renderKitCards(){
   }).join('');
 }
 
-function selecionarTodosGrupo(grpId){
+function toggleGrupo(grpId){
   const grp=document.getElementById(grpId);
-  if(!grp) return;
-  // Adicionar todos ao sel e atualizar checkmarks visualmente
-  grp.querySelectorAll('[data-cod]').forEach(function(el){
-    const cod=el.getAttribute('data-cod');
-    if(!sel.has(cod)) sel.set(cod,1);
-    el.classList.add('on');
-    const chk=el.querySelector('.kit-mchk');
-    if(chk) chk.textContent='✓';
-  });
+  const btn=document.getElementById('btn-'+grpId);
+  if(!grp||!btn) return;
+  const items=grp.querySelectorAll('[data-cod]');
+  // Verificar se todos já estão selecionados
+  const todosSel=[...items].every(function(el){return sel.has(el.getAttribute('data-cod'));});
+  if(!todosSel){
+    // Selecionar todos
+    items.forEach(function(el){
+      const cod=el.getAttribute('data-cod');
+      sel.set(cod,1);
+      el.classList.add('on');
+      const chk=el.querySelector('.kit-mchk');
+      if(chk) chk.textContent='✓';
+    });
+    btn.textContent='Apagar todos';
+    btn.style.borderColor='var(--vermelho)';
+    btn.style.color='var(--vermelho)';
+  } else {
+    // Apagar todos (remover do sel)
+    items.forEach(function(el){
+      const cod=el.getAttribute('data-cod');
+      sel.delete(cod);
+      el.classList.remove('on');
+      const chk=el.querySelector('.kit-mchk');
+      if(chk) chk.textContent='';
+    });
+    btn.textContent='Selecionar todos';
+    btn.style.borderColor='var(--verde2)';
+    btn.style.color='var(--verde2)';
+  }
   limpar();chkBtn();renderKitCards();
 }
 function aplicarTodos(){
