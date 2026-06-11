@@ -152,7 +152,7 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
   .rec-hdr-logo{width:48px;height:48px;flex-shrink:0;object-fit:cover;border-radius:8px}
   .rec-hdr-info{flex:1}
   .rec-hdr-marca{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555!important}
-  .rec-hdr-nome{font-size:20px;font-weight:700;color:#000!important;line-height:1.2;margin-top:1px}
+  .rec-hdr-nome{font-size:20px;font-weight:700;color:#000!important;line-height:1.2;margin-top:1px}.rec-hdr-cod{font-size:12px;font-weight:400;opacity:.55;font-family:"DM Mono",monospace}
   .rec-hdr-tags{display:flex!important;gap:6px;margin-top:4px;flex-wrap:wrap}
   .rec-hdr-tag{font-size:9px;color:#333!important;background:#eee!important;border:1px solid #aaa;border-radius:3px;padding:2px 7px;font-weight:600}
   .rec-hdr-caixa{text-align:center;border-left:2px solid #aaa;padding-left:10px;min-width:54px}
@@ -887,7 +887,7 @@ function gerar(){
       <div class="rec-hdr-logo">${logoIMG}</div>
       <div class="rec-hdr-info">
         <div class="rec-hdr-marca">${s.p.marca}</div>
-        <div class="rec-hdr-nome">${s.p.nome}</div>
+        <div class="rec-hdr-nome"><span class="rec-hdr-cod">${s.p.cod?s.p.cod+" · ":""}</span>${s.p.nome}</div>
         <div class="rec-hdr-tags">${tagsHtml}</div>
       </div>
       <div class="rec-hdr-caixa">
