@@ -640,8 +640,16 @@ function carregarKit(){
   limpar();
   if(!kit){itensEl.style.display='none';qtdFld.style.display='none';sel.clear();renderSelCards();chkBtn();return;}
 
-  // Limpa seleção ao trocar de kit — operador escolhe manualmente
+  // Limpa seleção ao trocar de kit
   sel.clear();
+  // Se o kit não tem variáveis, os fixos entram direto (não há outra escolha)
+  if(!kit.v||kit.v.length===0){
+    const PPALL0=[...PP,...PP_BASE];
+    kit.f.forEach(function(cod){
+      const p=PPALL0.find(function(x){return x.cod===cod;});
+      if(p) sel.set(cod,1);
+    });
+  }
 
   // Itens fixos — exibir como informativos (já inclusos, operador define quantidade nos cards)
   let html='';
