@@ -428,7 +428,7 @@ async function carregarDados(){
       "Estro Way":{f:["REC-048"],v:[{l:"Estrogonofe (sabor)",m:"Estro Way",c:"Estrogonofe"}]},
       "Feijuca Way":{f:["REC-047","REC-048","REC-049","REC-051","REC-050","REC-052","REC-053","REC-054"],v:[]},
       "Nhoque Way":{f:["REC-046"],v:[{l:"Proteína / Molho",m:"Pasta Way",c:"Proteínas"},{l:"Molho",m:"Pasta Way",c:"Molhos"}]},
-      "Parme Way":{f:["REC-067"],v:[{l:"Proteína Empanada",m:"Parme Way",c:"Proteínas"},{l:"Molho",m:"Parme Way",c:"Molhos"}]},
+      "Parme Way":{f:["REC-048"],v:[{l:"Proteína Empanada",m:"Parme Way",c:"Proteínas"},{l:"Molho",m:"Parme Way",c:"Molhos"}]},
       "Pasta Way":{f:[],v:[{l:"Massa",m:"Pasta Way",c:"Massas"},{l:"Molho",m:"Pasta Way",c:"Molhos"},{l:"Proteína",m:"Pasta Way",c:"Proteínas"}]},
       "Riso Way":{f:["REC-033","REC-032"],v:[{l:"Proteína",m:"Riso Way"}]},
       "Yaki Way":{f:["REC-035","REC-040","REC-041","REC-034"],v:[{l:"Yakisoba (sabor)",m:"Yaki Way",c:"Proteínas"}]}
@@ -640,16 +640,30 @@ function carregarKit(){
   limpar();
   if(!kit){itensEl.style.display='none';qtdFld.style.display='none';sel.clear();renderSelCards();chkBtn();return;}
 
-  // Marca todos os preparos fixos do kit (inclui preparos base)
-  const PPALL=()=>[...PP,...PP_BASE];
+  // Limpa seleção ao trocar de kit — operador escolhe manualmente
   sel.clear();
-  kit.f.forEach(cod=>{
-    const p=PPALL().find(x=>x.cod===cod);
-    if(p) sel.set(cod,1);
-  });
+
+  // Itens fixos — exibir como informativos (já inclusos, operador define quantidade nos cards)
+  let html='';
+  if(kit.f&&kit.f.length>0){
+    const PPALL2=[...PP,...PP_BASE];
+    const fixosNomes=kit.f.map(function(cod){
+      const p=PPALL2.find(function(x){return x.cod===cod;});
+      return p?p.nome:'';
+    }).filter(Boolean);
+    if(fixosNomes.length>0){
+      html+='<div style="background:var(--bg2);border:1px solid var(--borda);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:var(--sub)">'
+        +'<span style="font-weight:700;color:var(--verde2)">✓ Inclusos no kit: </span>'
+        +fixosNomes.join(' · ')+'</div>';
+      // Adicionar fixos ao sel automaticamente
+      kit.f.forEach(function(cod){
+        const p=PPALL2.find(function(x){return x.cod===cod;});
+        if(p) sel.set(cod,1);
+      });
+    }
+  }
 
   // Itens variáveis — multi-select
-  let html='';
   if(kit.v&&kit.v.length>0){
     kit.v.forEach((v,i)=>{
       const ops=PP.filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
