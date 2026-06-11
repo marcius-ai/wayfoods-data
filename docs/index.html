@@ -652,15 +652,19 @@ function carregarKit(){
   let html='';
   if(kit.v&&kit.v.length>0){
     kit.v.forEach((v,i)=>{
-      const ops=[...PP,...PP_BASE].filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+      const ops=PP.filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+      const grpId='grp-'+i;
       html+=`<div class="kit-item" style="align-items:flex-start;flex-direction:column;gap:6px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div class="kit-n">${i+1}</div>
-          <span style="font-size:13px;font-weight:500">${v.l}</span>
+        <div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="kit-n">${i+1}</div>
+            <span style="font-size:13px;font-weight:500">${v.l}</span>
+          </div>
+          <button onclick="selecionarTodosGrupo('${grpId}')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--verde2);background:transparent;color:var(--verde2);cursor:pointer;font-weight:600">Selecionar todos</button>
         </div>
-        <div class="kit-multi" style="width:100%">
+        <div class="kit-multi" style="width:100%" id="${grpId}">
           <div class="kit-multi-scroll">
-            ${ops.map(p=>`<div class="kit-mitem${sel.has(p.cod)?' on':''}" onclick="toggleKitVar('${p.cod}')">
+            ${ops.map(p=>`<div class="kit-mitem${sel.has(p.cod)?' on':''}" onclick="toggleKitVar('${p.cod}')" data-cod="${p.cod}">
               <div class="kit-mchk">${sel.has(p.cod)?'✓':''}</div>
               <div style="font-size:13px">${p.nome}</div>
             </div>`).join('')}
@@ -702,6 +706,17 @@ function renderKitCards(){
   }).join('');
 }
 
+function selecionarTodosGrupo(grpId){
+  const grp=document.getElementById(grpId);
+  if(!grp) return;
+  grp.querySelectorAll('[data-cod]').forEach(function(el){
+    const cod=el.getAttribute('data-cod');
+    if(!sel.has(cod)) sel.set(cod,1);
+  });
+  limpar();chkBtn();renderKitCards();
+  // Re-renderizar checkmarks
+  carregarKit();
+}
 function aplicarTodos(){
   const v=document.getElementById('input-todos').value;
   if(!v||parseFloat(v)<=0) return;
