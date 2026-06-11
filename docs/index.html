@@ -61,6 +61,9 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
 .sc-qtd{width:52px;padding:4px 6px;border-radius:7px;border:1.5px solid var(--borda);background:#fff;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--verde);text-align:center;box-sizing:border-box;-moz-appearance:textfield}
 .sc-qtd::-webkit-outer-spin-button,.sc-qtd::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .sc-qtd:focus{outline:none;border-color:var(--verde)}
+.aplicar-todos{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:var(--bg2);border-radius:10px;border:1px solid var(--borda)}
+.btn-aplicar-todos{background:var(--verde2);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-aplicar-todos:hover{opacity:.88}
 .sc-porcao{font-size:12px;color:var(--sub);white-space:nowrap}
 .sc-del-wrap{display:flex;align-items:center;justify-content:center}
 .sc-del{background:none;border:none;color:var(--sub);cursor:pointer;font-size:13px;padding:2px 4px;opacity:.45;font-family:'DM Sans',sans-serif;line-height:1}
@@ -272,6 +275,10 @@ select:focus,.inp-txt:focus{outline:none;border-color:var(--verde)}
       <div id="kit-itens" style="display:none"></div>
       <div id="kit-sel-area" style="display:none">
         <label class="lbl">Quantidade por preparo *</label>
+        <div class="aplicar-todos">
+          <input id="input-todos" class="sc-qtd" type="number" min="1" step="1" placeholder="Ex: 40" style="width:80px;font-size:14px;padding:6px 8px">
+          <button onclick="aplicarTodos()" class="btn-aplicar-todos">Aplicar para todos</button>
+        </div>
         <div class="sel-cards" id="kit-sel-cards"></div>
       </div>
       <div class="fld" id="kit-qtd-fld" style="display:none;margin-top:14px">
@@ -687,6 +694,16 @@ function renderKitCards(){
   }).join('');
 }
 
+function aplicarTodos(){
+  const v=document.getElementById('input-todos').value;
+  if(!v||parseFloat(v)<=0) return;
+  sel.forEach(function(_,cod){
+    const p=[...PP,...PP_BASE].find(function(x){return x.cod===cod;});
+    const isBase=p&&(!p.porcaoG||!p.porcao||p.porcao==='—');
+    sel.set(cod,isBase?(parseFloat(v)||0):(parseInt(v)||0));
+  });
+  limpar();chkBtn();renderKitCards();
+}
 function setKitQtd(cod,v,isBase){
   sel.set(cod,isBase?(parseFloat(v)||0):(parseInt(v)||0));
   limpar();chkBtn();
