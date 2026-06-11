@@ -655,18 +655,15 @@ function carregarKit(){
       html+='<div style="background:var(--bg2);border:1px solid var(--borda);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:var(--sub)">'
         +'<span style="font-weight:700;color:var(--verde2)">✓ Inclusos no kit: </span>'
         +fixosNomes.join(' · ')+'</div>';
-      // Adicionar fixos ao sel automaticamente
-      kit.f.forEach(function(cod){
-        const p=PPALL2.find(function(x){return x.cod===cod;});
-        if(p) sel.set(cod,1);
-      });
+
     }
   }
 
   // Itens variáveis — multi-select
   if(kit.v&&kit.v.length>0){
     kit.v.forEach((v,i)=>{
-      const ops=PP.filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+      const _pool=(v.c&&['Massas','Bases','Acompanhamentos'].includes(v.c))?[...PP,...PP_BASE]:PP;
+      const ops=_pool.filter(x=>x.marcas.includes(v.m)&&(!v.c||x.cat===v.c)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
       const grpId='grp-'+i;
       html+=`<div class="kit-item" style="align-items:flex-start;flex-direction:column;gap:6px">
         <div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between">
