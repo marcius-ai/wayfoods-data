@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Contagem de Estoque — Way Foods</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --card2:#21252e; --line:#2c313c;
+    --txt:#eef1f6; --muted:#97a0b0; --accent:#ff7a18; --accent2:#16a34a;
+    --warn:#f59e0b; --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  body{padding-bottom:96px}
+
+  header{position:sticky;top:0;z-index:20;background:#12141a;
+    border-bottom:1px solid var(--line);padding:10px 12px 8px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+  .meta{display:flex;gap:8px;margin-top:8px}
+  .meta label{flex:1;font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+  .meta select,.meta input{background:var(--card2);color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:9px 10px;font-size:14px;width:100%}
+
+  .tabs{display:flex;gap:6px;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .tab{flex:1 0 auto;text-align:center;padding:8px 12px;border-radius:10px;background:var(--card2);
+    border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .tab.active{background:var(--accent);color:#1a1207;border-color:var(--accent)}
+  .tab .n{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+
+  .search{margin-top:8px}
+  .search input{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:10px 12px;font-size:14px}
+
+  main{padding:10px 12px}
+  .group{margin-bottom:10px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
+  .group>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;
+    align-items:center;font-weight:600;font-size:14px;background:var(--card2)}
+  .group>summary::-webkit-details-marker{display:none}
+  .group>summary .badge{font-size:11px;color:var(--muted);font-weight:500}
+  .group>summary .badge b{color:var(--accent2)}
+
+  .item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+  .item .info{flex:1;min-width:0}
+  .item .nome{font-size:14px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item.filled .nome{color:#fff}
+  .item .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .item.filled{background:rgba(22,163,74,.07)}
+
+  .stepper{display:flex;align-items:center;gap:6px}
+  .stepper button{width:34px;height:38px;border-radius:9px;border:1px solid var(--line);
+    background:var(--card2);color:var(--txt);font-size:20px;line-height:1;font-weight:600}
+  .stepper button:active{background:var(--accent);color:#1a1207}
+  .qty{width:62px;height:38px;text-align:center;background:#0c0e12;border:1px solid var(--line);
+    color:#fff;border-radius:9px;font-size:15px;font-weight:600}
+  .qty:focus{outline:2px solid var(--accent)}
+  .unit{font-size:11px;color:var(--muted);width:26px;text-align:left}
+
+  footer{position:fixed;bottom:0;left:0;right:0;background:#12141a;border-top:1px solid var(--line);
+    padding:10px 12px;display:flex;gap:10px;align-items:center}
+  footer .stat{flex:1;font-size:12px;color:var(--muted)}
+  footer .stat b{color:var(--txt)}
+  .btn{padding:12px 18px;border-radius:11px;border:none;font-size:15px;font-weight:700;background:var(--accent);color:#1a1207}
+  .btn:disabled{opacity:.4}
+
+  .loading,.error{padding:40px 16px;text-align:center;color:var(--muted)}
+  .error{color:#fca5a5}
+
+  /* modal preview */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:50}
+  .modal.show{display:flex}
+  .sheet{background:var(--card);width:100%;max-height:80vh;border-radius:18px 18px 0 0;padding:16px;overflow:auto}
+  .sheet h3{margin:0 0 6px}
+  .sheet pre{background:#0c0e12;border:1px solid var(--line);border-radius:10px;padding:12px;
+    font-size:11px;overflow:auto;color:#cbd5e1;white-space:pre-wrap;word-break:break-word}
+  .sheet .close{margin-top:12px;width:100%;background:var(--card2);color:var(--txt)}
+  .saved-pill{font-size:11px;color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> Contagem de Estoque · Way Foods</div>
+  <div class="meta">
+    <label>Loja
+      <select id="loja">
+        <option>Suzano</option>
+        <option>São José dos Campos</option>
+      </select>
+    </label>
+    <label>Data
+      <input type="date" id="data">
+    </label>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="search"><input id="busca" placeholder="Buscar item..." inputmode="search"></div>
+</header>
+
+<main id="app"><div class="loading">Carregando itens do GitHub…</div></main>
+
+<footer>
+  <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span></div>
+  <button class="btn" id="salvar" disabled>Revisar</button>
+</footer>
+
+<div class="modal" id="modal">
+  <div class="sheet">
+    <h3>Pré-visualização do envio</h3>
+    <p style="color:var(--muted);font-size:12px;margin:.2em 0 1em">
+      A gravação ainda não está conectada. Abaixo está exatamente o que será enviado ao SharePoint quando ligarmos o fluxo.</p>
+    <pre id="payload"></pre>
+    <button class="btn close" id="fechar">Fechar</button>
+  </div>
+</div>
+
+<script>
+const RAW = "https://raw.githubusercontent.com/marcius-ai/wayfoods-data/main/wayfoods_data.json";
+let ITENS = [];            // {code,nome,categoria,unidade,tipo,almox}
+let estado = {};           // code -> quantidade (string)
+let abaAtual = null;       // almoxarifado selecionado
+const ORDEM_ALMOX = ["Congelado","Resfriado","Seco","Preparos"];
+
+const $ = s => document.querySelector(s);
+const val = f => (f && typeof f === "object") ? f.Value : f;
+
+function chaveLS(){ return "contagem::" + $("#loja").value + "::" + $("#data").value; }
+
+function carregarEstado(){
+  try{ estado = JSON.parse(localStorage.getItem(chaveLS()) || "{}"); }
+  catch(e){ estado = {}; }
+}
+function salvarEstado(){
+  localStorage.setItem(chaveLS(), JSON.stringify(estado));
+  $("#savedPill").textContent = "rascunho salvo no aparelho";
+}
+
+async function carregar(){
+  try{
+    const r = await fetch(RAW, {cache:"no-store"});
+    const raiz = await r.json();
+    const P = k => { const v = raiz[k]; return typeof v === "string" ? JSON.parse(v) : v; };
+
+    const insumos = P("insumos").map(i => ({
+      code:i.Title, nome:i.field_1, categoria:val(i.field_2)||"Sem categoria",
+      unidade:val(i.field_3)||"un", tipo:"insumo", almox:val(i.Almoxarifado)||"Sem local",
+      ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null)
+    }));
+    const preparos = P("receitas").filter(r => r.Ativa !== false).map(r => ({
+      code:r.Title, nome:r.field_1, categoria:val(r.field_3)||"Sem categoria",
+      unidade:val(r.field_5)||"un", tipo:"preparo", almox:"Preparos",
+      ordem: (typeof r.OrdemEstoque === "number" ? r.OrdemEstoque : null)
+    }));
+    ITENS = [...insumos, ...preparos];
+
+    carregarEstado();
+    montarTabs();
+    render();
+    $("#salvar").disabled = false;
+  }catch(e){
+    $("#app").innerHTML = '<div class="error">Falha ao carregar os dados.<br>'+e.message+'</div>';
+  }
+}
+
+function montarTabs(){
+  const presentes = [...new Set(ITENS.map(i=>i.almox))];
+  const ordenadas = [
+    ...ORDEM_ALMOX.filter(a=>presentes.includes(a)),
+    ...presentes.filter(a=>!ORDEM_ALMOX.includes(a)).sort()
+  ];
+  if(!abaAtual || !ordenadas.includes(abaAtual)) abaAtual = ordenadas[0];
+  $("#tabs").innerHTML = ordenadas.map(a=>{
+    const n = ITENS.filter(i=>i.almox===a).length;
+    return '<div class="tab'+(a===abaAtual?' active':'')+'" data-tab="'+a+'">'+a+
+      '<span class="n">'+n+' itens</span></div>';
+  }).join("");
+}
+
+function render(){
+  const termo = $("#busca").value.trim().toLowerCase();
+  const lista = ITENS.filter(i => i.almox === abaAtual)
+    .filter(i => !termo || i.nome.toLowerCase().includes(termo) || i.code.toLowerCase().includes(termo));
+
+  // Se houver OrdemEstoque definida, lista plana na sequência do estoque.
+  // Senão, agrupa por categoria (ordem alfabética, itens por código).
+  const temOrdem = lista.some(i => i.ordem != null);
+  let secoes;
+  if(temOrdem){
+    const ordenada = lista.slice().sort((a,b)=>{
+      if(a.ordem != null && b.ordem != null) return a.ordem - b.ordem;
+      if(a.ordem != null) return -1;
+      if(b.ordem != null) return 1;
+      return a.nome.localeCompare(b.nome,'pt');
+    });
+    secoes = [["Ordem do estoque", ordenada]];
+  } else {
+    const grupos = {};
+    lista.forEach(i => { (grupos[i.categoria] = grupos[i.categoria] || []).push(i); });
+    secoes = Object.keys(grupos).sort((a,b)=>a.localeCompare(b,'pt'))
+      .map(cat => [cat, grupos[cat].sort((a,b)=>a.code.localeCompare(b.code))]);
+  }
+
+  let html = "";
+  if(!lista.length){ html = '<div class="loading">Nenhum item encontrado.</div>'; }
+  secoes.forEach(([titulo, itens]) => {
+    const preench = itens.filter(i => estado[i.code]).length;
+    html += '<details class="group" open><summary>'+titulo+
+      '<span class="badge"><b>'+preench+'</b>/'+itens.length+'</span></summary>';
+    itens.forEach(i => {
+      const q = estado[i.code] || "";
+      html += '<div class="item'+(q?' filled':'')+'" data-code="'+i.code+'">'+
+        '<div class="info"><div class="nome">'+i.nome+'</div>'+
+        '<div class="sub">'+i.code+' · '+i.unidade+'</div></div>'+
+        '<div class="stepper">'+
+          '<button data-act="dec">−</button>'+
+          '<input class="qty" inputmode="decimal" value="'+q+'" placeholder="0">'+
+          '<button data-act="inc">+</button>'+
+          '<span class="unit">'+i.unidade+'</span>'+
+        '</div></div>';
+    });
+    html += '</details>';
+  });
+  $("#app").innerHTML = html;
+  atualizarContador();
+}
+
+function setQtd(code, v){
+  v = (v+"").replace(",",".").replace(/[^0-9.]/g,"");
+  if(v==="" || v==="0"){ delete estado[code]; } else { estado[code]=v; }
+  salvarEstado();
+  atualizarContador();
+}
+
+function atualizarContador(){
+  $("#cont").textContent = Object.keys(estado).length;
+}
+
+// ---- eventos ----
+$("#app").addEventListener("input", e=>{
+  if(e.target.classList.contains("qty")){
+    const row=e.target.closest(".item");
+    setQtd(row.dataset.code, e.target.value);
+    row.classList.toggle("filled", !!estado[row.dataset.code]);
+    const sum=row.closest(".group").querySelector(".badge b");
+    const itens=row.closest(".group").querySelectorAll(".item");
+    sum.textContent=[...itens].filter(it=>estado[it.dataset.code]).length;
+  }
+});
+$("#app").addEventListener("click", e=>{
+  const b=e.target.closest("button[data-act]"); if(!b) return;
+  const row=b.closest(".item"); const inp=row.querySelector(".qty");
+  let n=parseFloat((inp.value||"0").replace(",","."))||0;
+  const step = row.querySelector(".sub").textContent.includes(" un") ? 1 : 0.5;
+  n = b.dataset.act==="inc" ? n+step : Math.max(0,n-step);
+  inp.value = Number.isInteger(n)? n : n.toFixed(1);
+  setQtd(row.dataset.code, inp.value);
+  row.classList.toggle("filled", !!estado[row.dataset.code]);
+  const sum=row.closest(".group").querySelector(".badge b");
+  const itens=row.closest(".group").querySelectorAll(".item");
+  sum.textContent=[...itens].filter(it=>estado[it.dataset.code]).length;
+});
+$("#tabs").addEventListener("click", e=>{
+  const t = e.target.closest(".tab"); if(!t) return;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active"); abaAtual=t.dataset.tab; window.scrollTo(0,0); render();
+});
+$("#busca").addEventListener("input", render);
+$("#loja").addEventListener("change", ()=>{carregarEstado();render();});
+$("#data").addEventListener("change", ()=>{carregarEstado();render();});
+
+$("#salvar").addEventListener("click", ()=>{
+  const linhas = Object.keys(estado).map(code=>{
+    const it = ITENS.find(i=>i.code===code);
+    return { Item:code, Tipo:it.tipo==="insumo"?"Insumo":"Preparo",
+             Quantidade:parseFloat(estado[code]), Unidade:it.unidade };
+  });
+  const payload = { Loja:$("#loja").value, DataContagem:$("#data").value, Itens:linhas };
+  $("#payload").textContent = JSON.stringify(payload, null, 2);
+  $("#modal").classList.add("show");
+});
+$("#fechar").addEventListener("click", ()=>$("#modal").classList.remove("show"));
+
+// data default = hoje
+const hoje=new Date(); $("#data").value=
+  hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0")+"-"+String(hoje.getDate()).padStart(2,"0");
+
+carregar();
+</script>
+</body>
+</html>
