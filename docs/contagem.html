@@ -4,86 +4,96 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Contagem de Estoque — Way Foods</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0f1115; --card:#1a1d24; --card2:#21252e; --line:#2c313c;
-    --txt:#eef1f6; --muted:#97a0b0; --accent:#ff7a18; --accent2:#16a34a;
-    --warn:#f59e0b; --radius:14px; --maxw:560px;
+    --verde:#002d02; --verde2:#1a4a1a; --verm:#bf0417; --laranja:#f2a413;
+    --bg:#f5f0e8; --card:#fff; --borda:#e8e2d9; --txt:#1a1a1a; --sub:#6b6560;
+    --radius:14px; --maxw:560px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--bg);color:var(--txt);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+    font-family:'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
   body{padding-bottom:96px}
 
-  header{position:sticky;top:0;z-index:20;background:#12141a;
-    border-bottom:1px solid var(--line);padding:10px 12px 8px}
+  header{position:sticky;top:0;z-index:20;background:var(--verde);padding:10px 12px 10px}
   header>.brand,header>.meta,header>.tabs,header>.search{max-width:var(--maxw);margin-left:auto;margin-right:auto}
-  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
-  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
-  .meta{display:flex;gap:8px;margin-top:8px}
-  .meta label{flex:1;font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
-  .meta select,.meta input{background:var(--card2);color:var(--txt);border:1px solid var(--line);
-    border-radius:10px;padding:9px 10px;font-size:14px;width:100%}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand img{width:40px;height:40px;border-radius:9px;object-fit:cover;flex-shrink:0;background:var(--laranja)}
+  .brand .tit{font-weight:700;font-size:15px;color:#fff;line-height:1.15}
+  .brand .sub{font-size:11px;color:var(--laranja);font-weight:600}
+  .meta{display:flex;gap:8px;margin-top:10px}
+  .meta label{flex:1;font-size:11px;color:rgba(255,255,255,.65);display:flex;flex-direction:column;gap:3px}
+  .meta select,.meta input{background:var(--card);color:var(--txt);border:1px solid var(--borda);
+    border-radius:10px;padding:9px 10px;font-size:14px;width:100%;font-family:inherit}
 
   .tabs{display:flex;gap:6px;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-  .tab{flex:1 0 auto;text-align:center;padding:8px 12px;border-radius:10px;background:var(--card2);
-    border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
-  .tab.active{background:var(--accent);color:#1a1207;border-color:var(--accent)}
-  .tab .n{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+  .tab{flex:1 0 auto;text-align:center;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.1);
+    border:1px solid rgba(255,255,255,.18);font-size:13px;font-weight:600;color:rgba(255,255,255,.72);white-space:nowrap}
+  .tab.active{background:var(--laranja);color:#3a2600;border-color:var(--laranja)}
+  .tab .n{display:block;font-size:11px;font-weight:500;opacity:.85;margin-top:1px}
 
   .search{margin-top:8px}
-  .search input{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);
-    border-radius:10px;padding:10px 12px;font-size:14px}
+  .search input{width:100%;background:var(--card);border:1px solid var(--borda);color:var(--txt);
+    border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit}
 
-  main{padding:10px 12px;max-width:var(--maxw);margin:0 auto}
-  .group{margin-bottom:10px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
-  .group>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;
-    align-items:center;font-weight:600;font-size:14px;background:var(--card2)}
+  main{padding:12px;max-width:var(--maxw);margin:0 auto}
+  .group{margin-bottom:10px;border:1px solid var(--borda);border-radius:var(--radius);overflow:hidden;background:var(--card)}
+  .group>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;justify-content:space-between;
+    align-items:center;font-weight:700;font-size:12px;color:var(--verde);background:#faf7f1;
+    text-transform:uppercase;letter-spacing:.4px}
   .group>summary::-webkit-details-marker{display:none}
-  .group>summary .badge{font-size:11px;color:var(--muted);font-weight:500}
-  .group>summary .badge b{color:var(--accent2)}
+  .group>summary .badge{font-size:11px;color:var(--sub);font-weight:600;text-transform:none;letter-spacing:0}
+  .group>summary .badge b{color:var(--verde2)}
 
-  .item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+  .item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--borda)}
   .item .info{flex:1;min-width:0}
-  .item .nome{font-size:14px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .item.filled .nome{color:#fff}
-  .item .sub{font-size:11px;color:var(--muted);margin-top:2px}
-  .item.filled{background:rgba(22,163,74,.07)}
+  .item .nome{font-size:14px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--txt)}
+  .item .sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .item.filled{background:#eef6ee}
 
   .stepper{display:flex;align-items:center;gap:6px}
-  .stepper button{width:34px;height:38px;border-radius:9px;border:1px solid var(--line);
-    background:var(--card2);color:var(--txt);font-size:20px;line-height:1;font-weight:600}
-  .stepper button:active{background:var(--accent);color:#1a1207}
-  .qty{width:62px;height:38px;text-align:center;background:#0c0e12;border:1px solid var(--line);
-    color:#fff;border-radius:9px;font-size:15px;font-weight:600}
-  .qty:focus{outline:2px solid var(--accent)}
-  .unit{font-size:11px;color:var(--muted);width:26px;text-align:left}
+  .stepper button{width:34px;height:38px;border-radius:9px;border:1px solid var(--borda);
+    background:#faf7f1;color:var(--verde);font-size:20px;line-height:1;font-weight:700}
+  .stepper button:active{background:var(--verde);color:#fff;border-color:var(--verde)}
+  .qty{width:58px;height:38px;text-align:center;background:#fff;border:1px solid var(--borda);
+    color:var(--verde);border-radius:9px;font-size:15px;font-weight:700;font-family:inherit}
+  .qty:focus{outline:2px solid var(--laranja)}
+  .unit{font-size:11px;color:var(--sub);width:26px;text-align:left}
 
-  footer{position:fixed;bottom:0;left:0;right:0;background:#12141a;border-top:1px solid var(--line);
+  footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--borda);
     padding:10px 12px;display:flex;justify-content:center}
   .footwrap{display:flex;gap:10px;align-items:center;width:100%;max-width:var(--maxw)}
-  footer .stat{flex:1;font-size:12px;color:var(--muted)}
+  footer .stat{flex:1;font-size:12px;color:var(--sub)}
   footer .stat b{color:var(--txt)}
-  .btn{padding:12px 18px;border-radius:11px;border:none;font-size:15px;font-weight:700;background:var(--accent);color:#1a1207}
-  .btn:disabled{opacity:.4}
+  .btn{padding:12px 18px;border-radius:11px;border:none;font-size:15px;font-weight:700;background:var(--verm);color:#fff;font-family:inherit}
+  .btn:disabled{opacity:.35}
 
-  .loading,.error{padding:40px 16px;text-align:center;color:var(--muted)}
-  .error{color:#fca5a5}
+  .loading,.error{padding:40px 16px;text-align:center;color:var(--sub)}
+  .error{color:var(--verm)}
 
   /* modal preview */
-  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:50}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;z-index:50}
   .modal.show{display:flex}
   .sheet{background:var(--card);width:100%;max-height:80vh;border-radius:18px 18px 0 0;padding:16px;overflow:auto}
-  .sheet h3{margin:0 0 6px}
-  .sheet pre{background:#0c0e12;border:1px solid var(--line);border-radius:10px;padding:12px;
-    font-size:11px;overflow:auto;color:#cbd5e1;white-space:pre-wrap;word-break:break-word}
-  .sheet .close{margin-top:12px;width:100%;background:var(--card2);color:var(--txt)}
-  .saved-pill{font-size:11px;color:var(--accent2)}
+  .sheet h3{margin:0 0 6px;color:var(--verde)}
+  .sheet pre{background:#faf7f1;border:1px solid var(--borda);border-radius:10px;padding:12px;
+    font-size:11px;overflow:auto;color:#333;white-space:pre-wrap;word-break:break-word}
+  .sheet .close{margin-top:12px;width:100%;background:var(--verde);color:#fff}
+  .saved-pill{font-size:11px;color:var(--verde2)}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand"><span class="dot"></span> Contagem de Estoque · Way Foods</div>
+  <div class="brand">
+    <img src="logo.jpg" alt="Way Foods">
+    <div>
+      <div class="tit">Contagem de Estoque</div>
+      <div class="sub">WAY FOODS</div>
+    </div>
+  </div>
   <div class="meta">
     <label>Loja
       <select id="loja">
