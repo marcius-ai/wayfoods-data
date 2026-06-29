@@ -25,10 +25,10 @@
   .brand .tit{font-weight:700;font-size:15px;color:#fff;line-height:1.15}
   .brand .sub{font-size:11px;color:var(--laranja);font-weight:600}
   .meta{display:flex;gap:6px;margin-top:10px}
-  .meta label{flex:1;font-size:10px;color:rgba(255,255,255,.6);display:flex;flex-direction:column;gap:2px}
-  .meta label.loja{flex:1.3}
+  .meta label{flex:1 1 0;min-width:0;font-size:10px;color:rgba(255,255,255,.6);display:flex;flex-direction:column;gap:2px}
   .meta select,.meta input{background:var(--card);color:var(--txt);border:1px solid var(--borda);
-    border-radius:8px;padding:6px 8px;font-size:13px;width:100%;font-family:inherit;min-width:0}
+    border-radius:8px;padding:6px 6px;font-size:13px;width:100%;font-family:inherit;min-width:0}
+  .meta input[type=date]{font-size:12px;padding:6px 4px}
 
   .tabs{display:flex;gap:6px;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
   .tab{flex:1 0 auto;text-align:center;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.1);
@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v4</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
