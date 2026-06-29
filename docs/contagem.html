@@ -95,6 +95,14 @@
       <input type="date" id="data">
     </label>
   </div>
+  <div class="meta">
+    <label>Tipo
+      <select id="tipo">
+        <option value="insumo">Insumos</option>
+        <option value="preparo">Preparos</option>
+      </select>
+    </label>
+  </div>
   <div class="tabs" id="tabs"></div>
   <div class="search"><input id="busca" placeholder="Buscar item..." inputmode="search"></div>
 </header>
@@ -123,7 +131,8 @@ const RAW = "https://raw.githubusercontent.com/marcius-ai/wayfoods-data/main/way
 let ITENS = [];            // {code,nome,categoria,unidade,tipo,almox}
 let estado = {};           // code -> quantidade (string)
 let abaAtual = null;       // almoxarifado selecionado
-const ORDEM_ALMOX = ["Congelado","Resfriado","Seco","Preparos"];
+let tipoAtual = "insumo";  // insumo | preparo
+const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
 
 const $ = s => document.querySelector(s);
 const val = f => (f && typeof f === "object") ? f.Value : f;
@@ -152,7 +161,7 @@ async function carregar(){
     }));
     const preparos = P("receitas").filter(r => r.Ativa !== false).map(r => ({
       code:r.Title, nome:r.field_1, categoria:val(r.field_3)||"Sem categoria",
-      unidade:val(r.field_5)||"un", tipo:"preparo", almox:"Preparos",
+      unidade:val(r.field_5)||"un", tipo:"preparo", almox:val(r.Almoxarifado)||"Sem local",
       ordem: (typeof r.OrdemEstoque === "number" ? r.OrdemEstoque : null)
     }));
     ITENS = [...insumos, ...preparos];
@@ -167,14 +176,14 @@ async function carregar(){
 }
 
 function montarTabs(){
-  const presentes = [...new Set(ITENS.map(i=>i.almox))];
+  const presentes = [...new Set(ITENS.filter(i=>i.tipo===tipoAtual).map(i=>i.almox))];
   const ordenadas = [
     ...ORDEM_ALMOX.filter(a=>presentes.includes(a)),
     ...presentes.filter(a=>!ORDEM_ALMOX.includes(a)).sort()
   ];
   if(!abaAtual || !ordenadas.includes(abaAtual)) abaAtual = ordenadas[0];
   $("#tabs").innerHTML = ordenadas.map(a=>{
-    const n = ITENS.filter(i=>i.almox===a).length;
+    const n = ITENS.filter(i=>i.tipo===tipoAtual && i.almox===a).length;
     return '<div class="tab'+(a===abaAtual?' active':'')+'" data-tab="'+a+'">'+a+
       '<span class="n">'+n+' itens</span></div>';
   }).join("");
@@ -182,7 +191,7 @@ function montarTabs(){
 
 function render(){
   const termo = $("#busca").value.trim().toLowerCase();
-  const lista = ITENS.filter(i => i.almox === abaAtual)
+  const lista = ITENS.filter(i => i.tipo === tipoAtual && i.almox === abaAtual)
     .filter(i => !termo || i.nome.toLowerCase().includes(termo) || i.code.toLowerCase().includes(termo));
 
   // Se houver OrdemEstoque definida, lista plana na sequência do estoque.
@@ -269,6 +278,7 @@ $("#tabs").addEventListener("click", e=>{
   t.classList.add("active"); abaAtual=t.dataset.tab; window.scrollTo(0,0); render();
 });
 $("#busca").addEventListener("input", render);
+$("#tipo").addEventListener("change", e=>{tipoAtual=e.target.value; abaAtual=null; $("#busca").value=""; montarTabs(); render();});
 $("#loja").addEventListener("change", ()=>{carregarEstado();render();});
 $("#data").addEventListener("change", ()=>{carregarEstado();render();});
 
