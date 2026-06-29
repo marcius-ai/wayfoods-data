@@ -8,7 +8,7 @@
   :root{
     --bg:#0f1115; --card:#1a1d24; --card2:#21252e; --line:#2c313c;
     --txt:#eef1f6; --muted:#97a0b0; --accent:#ff7a18; --accent2:#16a34a;
-    --warn:#f59e0b; --radius:14px;
+    --warn:#f59e0b; --radius:14px; --maxw:560px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--bg);color:var(--txt);
@@ -17,6 +17,7 @@
 
   header{position:sticky;top:0;z-index:20;background:#12141a;
     border-bottom:1px solid var(--line);padding:10px 12px 8px}
+  header>.brand,header>.meta,header>.tabs,header>.search{max-width:var(--maxw);margin-left:auto;margin-right:auto}
   .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
   .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
   .meta{display:flex;gap:8px;margin-top:8px}
@@ -34,7 +35,7 @@
   .search input{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);
     border-radius:10px;padding:10px 12px;font-size:14px}
 
-  main{padding:10px 12px}
+  main{padding:10px 12px;max-width:var(--maxw);margin:0 auto}
   .group{margin-bottom:10px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
   .group>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;
     align-items:center;font-weight:600;font-size:14px;background:var(--card2)}
@@ -59,7 +60,8 @@
   .unit{font-size:11px;color:var(--muted);width:26px;text-align:left}
 
   footer{position:fixed;bottom:0;left:0;right:0;background:#12141a;border-top:1px solid var(--line);
-    padding:10px 12px;display:flex;gap:10px;align-items:center}
+    padding:10px 12px;display:flex;justify-content:center}
+  .footwrap{display:flex;gap:10px;align-items:center;width:100%;max-width:var(--maxw)}
   footer .stat{flex:1;font-size:12px;color:var(--muted)}
   footer .stat b{color:var(--txt)}
   .btn{padding:12px 18px;border-radius:11px;border:none;font-size:15px;font-weight:700;background:var(--accent);color:#1a1207}
@@ -100,8 +102,10 @@
 <main id="app"><div class="loading">Carregando itens do GitHub…</div></main>
 
 <footer>
-  <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span></div>
-  <button class="btn" id="salvar" disabled>Revisar</button>
+  <div class="footwrap">
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span></div>
+    <button class="btn" id="salvar" disabled>Revisar</button>
+  </div>
 </footer>
 
 <div class="modal" id="modal">
