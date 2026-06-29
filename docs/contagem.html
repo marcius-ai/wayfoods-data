@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v4</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v5</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -128,7 +128,8 @@
 <div class="modal" id="modal">
   <div class="sheet">
     <h3>Pré-visualização do envio</h3>
-    <p style="color:var(--muted);font-size:12px;margin:.2em 0 1em">
+    <div id="resumoEnvio" style="background:#eef6ee;border:1px solid var(--borda);border-radius:10px;padding:10px 12px;margin:.2em 0 1em;font-size:14px"></div>
+    <p style="color:var(--sub);font-size:12px;margin:.2em 0 1em">
       A gravação ainda não está conectada. Abaixo está exatamente o que será enviado ao SharePoint quando ligarmos o fluxo.</p>
     <pre id="payload"></pre>
     <button class="btn close" id="fechar">Fechar</button>
@@ -288,7 +289,7 @@ $("#tabs").addEventListener("click", e=>{
 });
 $("#busca").addEventListener("input", render);
 $("#tipo").addEventListener("change", e=>{tipoAtual=e.target.value; abaAtual=null; $("#busca").value=""; montarTabs(); render();});
-$("#loja").addEventListener("change", ()=>{carregarEstado();render();});
+$("#loja").addEventListener("change", ()=>{localStorage.setItem("contagem::ultimaLoja",$("#loja").value);carregarEstado();render();});
 $("#data").addEventListener("change", ()=>{carregarEstado();render();});
 
 $("#salvar").addEventListener("click", ()=>{
@@ -298,6 +299,9 @@ $("#salvar").addEventListener("click", ()=>{
              Quantidade:parseFloat(estado[code]), Unidade:it.unidade };
   });
   const payload = { Loja:$("#loja").value, DataContagem:$("#data").value, Itens:linhas };
+  const [a,m,d]=$("#data").value.split("-");
+  $("#resumoEnvio").innerHTML = 'Loja: <b style="color:var(--verde)">'+$("#loja").value+'</b>'+
+    '<br>Data: <b>'+d+'/'+m+'/'+a+'</b> · <b>'+linhas.length+'</b> itens';
   $("#payload").textContent = JSON.stringify(payload, null, 2);
   $("#modal").classList.add("show");
 });
@@ -306,6 +310,10 @@ $("#fechar").addEventListener("click", ()=>$("#modal").classList.remove("show"))
 // data default = hoje
 const hoje=new Date(); $("#data").value=
   hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0")+"-"+String(hoje.getDate()).padStart(2,"0");
+
+// restaura a última loja usada neste aparelho
+const ultimaLoja = localStorage.getItem("contagem::ultimaLoja");
+if(ultimaLoja){ const op=[...$("#loja").options].some(o=>o.value===ultimaLoja); if(op) $("#loja").value=ultimaLoja; }
 
 carregar();
 </script>
