@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v6</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v7</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -327,20 +327,31 @@ async function enviar(){
     if(!url){ return; }
     localStorage.setItem("contagem::flowUrl", url);
   }
-  const items = Object.keys(estado).map(c=>ITENS.find(i=>i.code===c)).filter(it=>it && it.tipo==="insumo")
-    .map(it=>({id:ID_SJC[it.code], qtd:parseFloat((estado[it.code]+"").replace(",","."))||0}))
-    .filter(x=>x.id);
-  const nPrep = Object.keys(estado).filter(c=>{const it=ITENS.find(i=>i.code===c); return it && it.tipo==="preparo";}).length;
-  if(!items.length){ st.textContent="Nenhum insumo contado para enviar."; st.style.color="var(--sub)"; return; }
+  const iso = new Date().toISOString();
+  const reqs=[]; let semId=0;
+  Object.keys(estado).forEach(code=>{
+    const it=ITENS.find(i=>i.code===code); if(!it) return;
+    const qtd=parseFloat((estado[code]+"").replace(",","."))||0;
+    if(it.tipo==="insumo"){
+      const id=ID_SJC[code]; if(!id){ semId++; return; }
+      reqs.push({uri:"_api/web/lists/getbytitle('EstoqueInsumos')/items("+id+")",
+        body:JSON.stringify({"__metadata":{"type":"SP.Data.EstoqueInsumosListItem"},"EstoqueAtual":qtd,"DataContagem":iso})});
+    } else {
+      const n=+code.slice(4); const id=(n>=1&&n<=72)?n:null; if(!id){ semId++; return; }
+      reqs.push({uri:"_api/web/lists/getbytitle('EstoquePorcionamentos')/items("+id+")",
+        body:JSON.stringify({"__metadata":{"type":"SP.Data.EstoquePorcionamentosListItem"},"field_5":qtd})});
+    }
+  });
+  if(!reqs.length){ st.textContent="Nada para enviar."; st.style.color="var(--sub)"; return; }
   btn.disabled=true; let ok=0, fail=0;
-  for(let i=0;i<items.length;i+=6){
-    const res=await Promise.allSettled(items.slice(i,i+6).map(x=>
+  for(let i=0;i<reqs.length;i+=6){
+    const res=await Promise.allSettled(reqs.slice(i,i+6).map(x=>
       fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(x)})));
     res.forEach(r=>{ if(r.status==="fulfilled" && r.value.ok) ok++; else fail++; });
-    st.textContent="Enviando… "+(ok+fail)+"/"+items.length; st.style.color="var(--sub)";
+    st.textContent="Enviando… "+(ok+fail)+"/"+reqs.length; st.style.color="var(--sub)";
   }
-  st.innerHTML="✅ Gravados <b>"+ok+"</b> insumos"+(fail?" · <b style='color:var(--verm)'>"+fail+" falha(s)</b>":"")+
-    (nPrep?"<br><span style='color:var(--sub);font-size:12px'>"+nPrep+" preparos não gravados (piloto só insumos)</span>":"");
+  st.innerHTML="✅ Gravados <b>"+ok+"</b> itens"+(fail?" · <b style='color:var(--verm)'>"+fail+" falha(s)</b>":"")+
+    (semId?"<br><span style='color:var(--sub);font-size:12px'>"+semId+" item(ns) sem cadastro de estoque (ignorados)</span>":"");
   st.style.color="var(--verde2)";
   btn.disabled=false;
 }
