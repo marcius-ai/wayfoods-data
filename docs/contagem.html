@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v5</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v6</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -130,14 +130,22 @@
     <h3>Pré-visualização do envio</h3>
     <div id="resumoEnvio" style="background:#eef6ee;border:1px solid var(--borda);border-radius:10px;padding:10px 12px;margin:.2em 0 1em;font-size:14px"></div>
     <p style="color:var(--sub);font-size:12px;margin:.2em 0 1em">
-      A gravação ainda não está conectada. Abaixo está exatamente o que será enviado ao SharePoint quando ligarmos o fluxo.</p>
+      Confira a <b>loja</b> e a quantidade de itens. Ao confirmar, o estoque dos <b>insumos</b> será gravado no SharePoint.</p>
     <pre id="payload"></pre>
-    <button class="btn close" id="fechar">Fechar</button>
+    <div id="envioStatus" style="font-size:13px;margin:10px 0;min-height:18px"></div>
+    <button class="btn" id="btnEnviar" style="width:100%;background:var(--verde2)">Confirmar e enviar</button>
+    <button id="fechar" style="margin-top:8px;width:100%;padding:11px;border-radius:11px;border:1px solid var(--borda);background:#fff;color:var(--sub);font-family:inherit;font-size:14px">Fechar</button>
   </div>
 </div>
 
 <script>
 const RAW = "https://raw.githubusercontent.com/marcius-ai/wayfoods-data/main/wayfoods_data.json";
+const LOJA_PILOTO = "São José dos Campos";
+// URL do fluxo de gravação: guardada SÓ no aparelho (não vai pro código público)
+function getFlowUrl(){ return localStorage.getItem("contagem::flowUrl") || ""; }
+// mapa código→ID da lista EstoqueInsumos (linhas de SJC)
+const ID_SJC = {};
+"001:1,002:2,003:3,004:4,005:6,006:5,007:7,008:8,009:9,010:10,011:14,012:13,013:12,014:11,015:15,016:16,017:17,018:18,019:20,020:19,021:21,022:22,023:24,024:25,025:23,026:27,027:26,028:28,029:29,030:30,031:31,032:32,033:34,034:36,035:33,036:35,037:38,038:37,039:39,040:40,041:41,042:42,043:43,044:44,045:45,046:47,047:46,048:48,049:49,050:50,051:51,052:52,053:54,054:57,055:53,056:55,057:56,058:58,059:59,060:60,061:61,062:66,063:65,064:62,065:64,066:63,067:67,068:72,069:68,070:69,071:71,072:70,073:73,074:74,075:75,076:76,077:78,078:79,079:77,080:81,081:80,082:82,083:83,084:85,085:84,086:86,087:87,088:88,089:90,090:89,091:96,092:92,093:95,094:91,095:94,096:93,097:97,098:99,099:98,100:102,101:100,102:101,103:105,104:104,105:103,106:107,107:108,108:109,109:110,110:106".split(",").forEach(p=>{const x=p.split(":"); ID_SJC["INS-"+x[0]]=+x[1];});
 let ITENS = [];            // {code,nome,categoria,unidade,tipo,almox}
 let estado = {};           // code -> quantidade (string)
 let abaAtual = null;       // almoxarifado selecionado
@@ -303,9 +311,40 @@ $("#salvar").addEventListener("click", ()=>{
   $("#resumoEnvio").innerHTML = 'Loja: <b style="color:var(--verde)">'+$("#loja").value+'</b>'+
     '<br>Data: <b>'+d+'/'+m+'/'+a+'</b> · <b>'+linhas.length+'</b> itens';
   $("#payload").textContent = JSON.stringify(payload, null, 2);
+  const ehPiloto = $("#loja").value === LOJA_PILOTO;
+  $("#envioStatus").textContent = ehPiloto ? "" : "Piloto: gravação só para São José dos Campos por enquanto.";
+  $("#envioStatus").style.color = ehPiloto ? "var(--sub)" : "var(--verm)";
+  $("#btnEnviar").disabled = !ehPiloto;
   $("#modal").classList.add("show");
 });
 $("#fechar").addEventListener("click", ()=>$("#modal").classList.remove("show"));
+
+async function enviar(){
+  const st=$("#envioStatus"), btn=$("#btnEnviar");
+  let url = getFlowUrl();
+  if(!url){
+    url = (prompt("Cole a URL de gravação (fornecida uma única vez neste aparelho):")||"").trim();
+    if(!url){ return; }
+    localStorage.setItem("contagem::flowUrl", url);
+  }
+  const items = Object.keys(estado).map(c=>ITENS.find(i=>i.code===c)).filter(it=>it && it.tipo==="insumo")
+    .map(it=>({id:ID_SJC[it.code], qtd:parseFloat((estado[it.code]+"").replace(",","."))||0}))
+    .filter(x=>x.id);
+  const nPrep = Object.keys(estado).filter(c=>{const it=ITENS.find(i=>i.code===c); return it && it.tipo==="preparo";}).length;
+  if(!items.length){ st.textContent="Nenhum insumo contado para enviar."; st.style.color="var(--sub)"; return; }
+  btn.disabled=true; let ok=0, fail=0;
+  for(let i=0;i<items.length;i+=6){
+    const res=await Promise.allSettled(items.slice(i,i+6).map(x=>
+      fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(x)})));
+    res.forEach(r=>{ if(r.status==="fulfilled" && r.value.ok) ok++; else fail++; });
+    st.textContent="Enviando… "+(ok+fail)+"/"+items.length; st.style.color="var(--sub)";
+  }
+  st.innerHTML="✅ Gravados <b>"+ok+"</b> insumos"+(fail?" · <b style='color:var(--verm)'>"+fail+" falha(s)</b>":"")+
+    (nPrep?"<br><span style='color:var(--sub);font-size:12px'>"+nPrep+" preparos não gravados (piloto só insumos)</span>":"");
+  st.style.color="var(--verde2)";
+  btn.disabled=false;
+}
+$("#btnEnviar").addEventListener("click", enviar);
 
 // data default = hoje
 const hoje=new Date(); $("#data").value=
