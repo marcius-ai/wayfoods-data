@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v7</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v8</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -323,7 +323,7 @@ async function enviar(){
   const st=$("#envioStatus"), btn=$("#btnEnviar");
   let url = getFlowUrl();
   if(!url){
-    url = (prompt("Cole a URL de gravação (fornecida uma única vez neste aparelho):")||"").trim();
+    url = (prompt("Este aparelho ainda não foi configurado para gravar. Chame o responsável (Marcius) para configurar. (URL de gravação):")||"").trim();
     if(!url){ return; }
     localStorage.setItem("contagem::flowUrl", url);
   }
@@ -356,6 +356,17 @@ async function enviar(){
   btn.disabled=false;
 }
 $("#btnEnviar").addEventListener("click", enviar);
+
+// configuração da URL de gravação via link (o gestor abre 1x em cada aparelho):
+//   contagem.html#cfg=<url-de-gravacao-encodada>
+(function(){
+  const m = (location.hash||"").match(/cfg=([^&]+)/);
+  if(m){
+    try{ const u=decodeURIComponent(m[1]).trim(); if(u) localStorage.setItem("contagem::flowUrl", u); }catch(e){}
+    history.replaceState(null,"",location.pathname+location.search);
+    alert("✅ Este aparelho foi configurado para gravar. Pode usar normalmente.");
+  }
+})();
 
 // data default = hoje
 const hoje=new Date(); $("#data").value=
