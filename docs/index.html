@@ -311,7 +311,7 @@ let KITS = {};
 const COR = {
   "Pasta Way":"#bf0417","Estro Way":"#c0392b","Riso Way":"#1e8449",
   "Yaki Way":"#6c3483","Nhoque Way":"#117a65","Feijuca Way":"#1a252f",
-  "Parme Way":"#922b21","Açaí Way":"#512e5f","China Way":"#a04000","Brazuca Way":"#1a5276"
+  "Parme Way":"#922b21","Açaí Way":"#512e5f","China Way":"#a04000","Brazuca Way":"#1a5276","Poke Way":"#0077B6"
 };
 
 let modo = "av";
@@ -431,7 +431,8 @@ async function carregarDados(){
       "Parme Way":{f:["REC-048"],v:[{l:"Proteína Empanada",m:"Parme Way",c:"Proteínas"},{l:"Molho",m:"Parme Way",c:"Molhos"}]},
       "Pasta Way":{f:[],v:[{l:"Massa",m:"Pasta Way",c:"Massas"},{l:"Molho",m:"Pasta Way",c:"Molhos"},{l:"Proteína",m:"Pasta Way",c:"Proteínas"}]},
       "Riso Way":{f:["REC-033","REC-032"],v:[{l:"Proteína",m:"Riso Way"}]},
-      "Yaki Way":{f:["REC-035","REC-040","REC-041","REC-034"],v:[{l:"Yakisoba (sabor)",m:"Yaki Way",c:"Proteínas"}]}
+      "Yaki Way":{f:["REC-035","REC-040","REC-041","REC-034"],v:[{l:"Yakisoba (sabor)",m:"Yaki Way",c:"Proteínas"}]},
+      "Poke Way":{f:[],v:[{l:"Proteína",m:"Poke Way",c:"Proteínas"},{l:"Base",m:"Poke Way",c:"Massas"},{l:"Molho",m:"Poke Way",c:"Molhos"},{l:"Acompanhamento",m:"Poke Way",c:"Acompanhamentos"}]}
     };
 
     INSUMOS = dados.insumos || [];
