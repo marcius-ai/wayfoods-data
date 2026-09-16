@@ -129,7 +129,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v12</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v13</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -188,10 +188,30 @@ function salvarEstado(){
 }
 
 async function baixarRaiz(){
-  // ?t= fura o cache da CDN do raw.githubusercontent (no-store sozinho nao basta)
   const r = await fetch(RAW + "?t=" + Date.now(), {cache:"no-store"});
   if(!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
+}
+
+/* LEITURA GARANTIDAMENTE FRESCA.
+   A CDN do raw.githubusercontent IGNORA a query string: o ?t= NAO fura o cache
+   e ela chega a servir versao de minutos atras. Mas a URL fixada no SHA do
+   commit e IMUTAVEL — logo nunca vem de cache. Entao: pergunta ao GitHub qual
+   o ultimo commit do arquivo e le por esse SHA.
+   Se a API falhar (limite de 60 req/h por IP), cai na leitura normal. */
+async function baixarRaizFresca(){
+  try{
+    const c = await fetch("https://api.github.com/repos/marcius-ai/wayfoods-data/commits"
+                          + "?path=wayfoods_data.json&per_page=1&t=" + Date.now(), {cache:"no-store"});
+    if(!c.ok) throw new Error("api " + c.status);
+    const sha = (await c.json())[0].sha;
+    const r = await fetch("https://raw.githubusercontent.com/marcius-ai/wayfoods-data/"
+                          + sha + "/wayfoods_data.json", {cache:"no-store"});
+    if(!r.ok) throw new Error("raw " + r.status);
+    return r.json();
+  }catch(e){
+    return baixarRaiz();   // degrada para a leitura normal
+  }
 }
 
 function aplicarDados(raiz){
@@ -241,25 +261,34 @@ async function sincronizar(){
   const antes = GERADO_EM;
   btn.disabled=true; msg.style.color="var(--sub)";
   try{
-    const url=getSyncUrl();
+    // Republicacao SEM fluxo novo e SEM segredo novo:
+    // um MERGE VAZIO (so __metadata, nenhum campo) na linha de RESERVA REC-076
+    // bump o Modified sem alterar dado nenhum -> dispara o gatilho
+    // "WayFoods - Trigger PAI EstoquePorcionamentos" -> republica o JSON.
+    // REC-076 e uma reserva INATIVA: nao aparece na contagem e nada depende dela.
+    const url=getSyncUrl()||getFlowUrl();
     if(!url){
       msg.textContent="Buscando a versão mais recente…";
-      aplicarDados(await baixarRaiz());
-      msg.textContent="Recarregado. (Este aparelho não está configurado para forçar a republicação — peça o link de configuração.)";
+      aplicarDados(await baixarRaizFresca());
+      msg.textContent="Recarregado. (Este aparelho ainda não foi configurado — peça o link de configuração ao gestor.)";
       msg.style.color="#b06a00";
       return;
     }
     msg.textContent="Pedindo ao SharePoint os dados novos…";
+    const SITE="https://domrubi.sharepoint.com/sites/WayFoods";
     await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-                     body:JSON.stringify({origem:"app-contagem"})});
+      body:JSON.stringify({
+        uri: SITE+"/_api/web/lists/getbytitle('EstoquePorcionamentos')/items(76)",
+        body: JSON.stringify({__metadata:{type:"SP.Data.EstoquePorcionamentosListItem"}})
+      })});
     const limite=Date.now()+150000;      // ate 2min30
     let tentativa=0;
     while(Date.now()<limite){
-      await new Promise(r=>setTimeout(r,6000));
+      await new Promise(r=>setTimeout(r,5000));
       tentativa++;
-      msg.textContent="Atualizando… aguarde ("+(tentativa*6)+"s)";
+      msg.textContent="Atualizando… aguarde ("+(tentativa*5)+"s)";
       let raiz=null;
-      try{ raiz=await baixarRaiz(); }catch(e){ continue; }
+      try{ raiz=await baixarRaizFresca(); }catch(e){ continue; }
       if(raiz && raiz.geradoEm && raiz.geradoEm!==antes){
         aplicarDados(raiz);
         msg.textContent="✅ Catálogo atualizado. Pode contar.";
