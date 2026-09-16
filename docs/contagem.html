@@ -120,7 +120,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span style="opacity:.4;font-size:10px">v10</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v11</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -161,6 +161,7 @@ let estado = {};           // code -> quantidade (string)
 let abaAtual = null;       // almoxarifado selecionado
 let tipoAtual = "insumo";  // insumo | preparo
 const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
+let GERADO_EM = null;
 
 const $ = s => document.querySelector(s);
 const val = f => (f && typeof f === "object") ? f.Value : f;
@@ -181,34 +182,68 @@ async function carregar(){
     const r = await fetch(RAW, {cache:"no-store"});
     const raiz = await r.json();
     const P = k => { const v = raiz[k]; return typeof v === "string" ? JSON.parse(v) : v; };
+    GERADO_EM = raiz.geradoEm || null;
 
     const insumos = P("insumos").map(i => ({
       code:i.Title, nome:i.field_1, categoria:val(i.field_2)||"Sem categoria",
       unidade:val(i.field_3)||"un", tipo:"insumo", almox:val(i.Almoxarifado)||"Sem local",
       ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null)
     }));
-    const preparos = P("receitas").filter(r => r.Ativa !== false).map(r => ({
-      code:r.Title, nome:r.field_1, categoria:val(r.field_3)||"Sem categoria",
-      unidade:val(r.field_5)||"un", tipo:"preparo", almox:val(r.Almoxarifado)||"Sem local",
-      ordem: (typeof r.OrdemEstoque === "number" ? r.OrdemEstoque : null)
-    }));
+    // Almoxarifado e OrdemEstoque dos PREPAROS moram em estoquePorcionamentos,
+    // NAO em receitas (essa lista nao tem essas colunas). A lista receitas
+    // continua mandando em "quem esta ativo" e no nome.
+    const PORC = {};
+    (P("estoquePorcionamentos") || []).forEach(p => { if (p.Title) PORC[p.Title] = p; });
+    const preparos = P("receitas").filter(r => r.Ativa !== false).map(r => {
+      const p = PORC[r.Title] || {};
+      return {
+        code:r.Title, nome:(p.field_1 || r.field_1), categoria:val(r.field_3)||"Sem categoria",
+        unidade:val(p.field_4)||val(r.field_5)||"un", tipo:"preparo",
+        almox:val(p.Almoxarifado)||"Sem local",
+        ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null)
+      };
+    });
     ITENS = [...insumos, ...preparos];
 
     carregarEstado();
     montarTabs();
     render();
+    pintarSelo();
     $("#salvar").disabled = false;
   }catch(e){
     $("#app").innerHTML = '<div class="error">Falha ao carregar os dados.<br>'+e.message+'</div>';
   }
 }
 
+function pintarSelo(){
+  const el = $("#selo"); if(!el) return;
+  if(!GERADO_EM){ el.textContent=""; return; }
+  const d = new Date(GERADO_EM);
+  const horas = (Date.now() - d.getTime()) / 36e5;
+  const quando = d.toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  let txt, cor;
+  if(horas < 2){ txt = "dados de agora ("+quando+")"; cor = "var(--sub)"; }
+  else if(horas < 24){ txt = "dados de "+quando; cor = "var(--sub)"; }
+  else { txt = "⚠ dados de "+quando+" ("+Math.floor(horas/24)+" dias atras)"; cor = "#bf0417"; }
+  el.textContent = txt; el.style.color = cor;
+}
+
 function montarTabs(){
   const presentes = [...new Set(ITENS.filter(i=>i.tipo===tipoAtual).map(i=>i.almox))];
-  const ordenadas = [
-    ...ORDEM_ALMOX.filter(a=>presentes.includes(a)),
-    ...presentes.filter(a=>!ORDEM_ALMOX.includes(a)).sort()
-  ];
+  // A aba segue a MENOR OrdemEstoque do almoxarifado — ou seja, a sequencia
+  // que a gestora cadastrou no SharePoint. Sem ordem definida, cai na lista
+  // fixa historica e depois em alfabetica.
+  const minOrdem = a => {
+    const v = ITENS.filter(i=>i.tipo===tipoAtual && i.almox===a && i.ordem!=null).map(i=>i.ordem);
+    return v.length ? Math.min(...v) : Infinity;
+  };
+  const ordenadas = presentes.slice().sort((a,b)=>{
+    const oa=minOrdem(a), ob=minOrdem(b);
+    if(oa!==ob) return oa-ob;
+    const ia=ORDEM_ALMOX.indexOf(a), ib=ORDEM_ALMOX.indexOf(b);
+    if(ia!==ib) return (ia<0?99:ia)-(ib<0?99:ib);
+    return a.localeCompare(b,'pt');
+  });
   if(!abaAtual || !ordenadas.includes(abaAtual)) abaAtual = ordenadas[0];
   $("#tabs").innerHTML = ordenadas.map(a=>{
     const n = ITENS.filter(i=>i.tipo===tipoAtual && i.almox===a).length;
