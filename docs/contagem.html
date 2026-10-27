@@ -129,11 +129,11 @@
   <div class="search"><input id="busca" placeholder="Buscar item..." inputmode="search"></div>
 </header>
 
-<main id="app"><div class="loading">Carregando itens do GitHub…</div></main>
+<main id="app"><div class="loading">Entrando…</div></main>
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v14</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v15</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -151,398 +151,426 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js" crossorigin="anonymous"></script>
 <script>
-const RAW = "https://raw.githubusercontent.com/marcius-ai/wayfoods-data/main/wayfoods_data.json";
-const LOJA_PILOTO = "São José dos Campos";
-// URL do fluxo de gravação: guardada SÓ no aparelho (não vai pro código público)
-function getFlowUrl(){ return localStorage.getItem("contagem::flowUrl") || ""; }
-function getSyncUrl(){ return localStorage.getItem("contagem::syncUrl") || ""; }
-// mapa código→ID da lista EstoqueInsumos (linhas de SJC)
-const ID_SJC = {};
-"001:1,002:2,003:3,004:4,005:6,006:5,007:7,008:8,009:9,010:10,011:14,012:13,013:12,014:11,015:15,016:16,017:17,018:18,019:20,020:19,021:21,022:22,023:24,024:25,025:23,026:27,027:26,028:28,029:29,030:30,031:31,032:32,033:34,034:36,035:33,036:35,037:38,038:37,039:39,040:40,041:41,042:42,043:43,044:44,045:45,046:47,047:46,048:48,049:49,050:50,051:51,052:52,053:54,054:57,055:53,056:55,057:56,058:58,059:59,060:60,061:61,062:66,063:65,064:62,065:64,066:63,067:67,068:72,069:68,070:69,071:71,072:70,073:73,074:74,075:75,076:76,077:78,078:79,079:77,080:81,081:80,082:82,083:83,084:85,085:84,086:86,087:87,088:88,089:90,090:89,091:96,092:92,093:95,094:91,095:94,096:93,097:97,098:99,099:98,100:102,101:100,102:101,103:105,104:104,105:103,106:107,107:108,108:109,109:110,110:106,111:111,112:112,113:113,114:114,115:115,116:116,117:117,118:118,119:119,120:120,121:121,122:122,123:123,124:124,125:125,126:126,127:127,128:128,129:129,130:130,131:131,132:132,133:133,134:134,135:135,136:136,137:137,138:138,139:139,140:140,141:141,142:142,143:143,144:144,145:145,146:146,147:147,148:148,149:149,150:150,151:151,152:152,153:153,154:154,155:155,156:156,157:157,158:158,159:159,160:160,161:161,162:162,163:163,164:164,165:165,166:166,167:167,168:168,169:169,170:170,171:171,172:172,173:173,174:174,175:175,176:176,177:177".split(",").forEach(p=>{const x=p.split(":"); ID_SJC["INS-"+x[0]]=+x[1];});
-// Um item só é gravável se tiver destino na lista de estoque:
-// insumo precisa estar no mapa ID_SJC; preparo precisa ser REC-001..105
-// (EstoquePorcionamentos tem os itens 1..105, com Id == número do código).
-const MAX_REC = 105;
-function gravavel(it){
-  if(it.tipo === "insumo") return !!ID_SJC[it.code];
-  const n = +it.code.slice(4);
-  return n >= 1 && n <= MAX_REC;
+/* =====================================================================
+   Contagem de Estoque — Way Foods — v15
+
+   O que mudou e por quê:
+
+   1. Quem grava é A PESSOA, com a conta Microsoft dela. Antes o aparelho
+      guardava uma URL secreta no localStorage, então só funcionava em
+      celular previamente configurado — e quem tivesse o link gravava.
+      Agora é login normal: funciona em qualquer aparelho e o SharePoint
+      registra QUEM contou.
+
+   2. Nada de Id chumbado. A ponte "código -> linha de estoque" é montada
+      lendo a própria lista. A versão anterior trazia 177 Ids escritos à
+      mão; o catálogo foi para 422 insumos e 245 deles ficaram sem destino,
+      em silêncio. Agora cresce sozinho: cadastrou, aparece.
+
+   3. Os dados vêm direto do SharePoint, não de um JSON publicado. Some o
+      atraso entre cadastrar e aparecer na contagem.
+
+   4. A tela desenha por partes, para aguentar milhares de itens no celular
+      sem travar.
+   ===================================================================== */
+
+const CFG = {
+  // clientId NÃO é segredo: identifica o app, não autoriza nada sozinho.
+  clientId : "070ac482-c9db-482d-a813-b35d74c15bb8",
+  authority: "https://login.microsoftonline.com/1a07c9c7-bde3-4e69-a3c1-8c2ee8a215c1",
+  site     : "domrubi.sharepoint.com,46d248aa-c512-440f-98d5-ceb4b302d485,97004cc3-6a45-41f6-b7bd-4ac509f44eea",
+  escopos  : ["https://graph.microsoft.com/Sites.ReadWrite.All"]
+};
+
+const SIGLA = { "São José dos Campos": "SJC", "Suzano": "SZN" };
+const POR_PAGINA = 120;          // linhas desenhadas por vez
+
+const $  = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+let ITENS = [];            // {code,nome,categoria,unidade,unidadeCurta,porcao,tipo,almox,ordem}
+let DEST  = {};            // "INS-001::SJC" -> id da linha de estoque
+let estado = {};           // code -> quantidade (texto)
+let abaAtual = null;
+let tipoAtual = "insumo";
+let LIDO_EM = null;
+const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
+
+/* ----------------------------------------------------- identidade */
+let msalApp = null, conta = null;
+
+async function iniciarAuth(){
+  msalApp = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: CFG.authority,
+            redirectUri: location.origin + location.pathname },
+    // localStorage e não sessionStorage: no celular a pessoa troca de aba
+    // e volta o dia inteiro; sessionStorage faria ela logar de novo sempre.
+    cache: { cacheLocation: "localStorage" }
+  });
+  await msalApp.initialize();
+  const r = await msalApp.handleRedirectPromise();
+  if (r && r.account) conta = r.account;
+  if (!conta) conta = msalApp.getAllAccounts()[0] || null;
+  if (conta) msalApp.setActiveAccount(conta);
+  return conta;
 }
 
-let ITENS = [];            // {code,nome,categoria,unidade,tipo,almox}
-let estado = {};           // code -> quantidade (string)
-let abaAtual = null;       // almoxarifado selecionado
-let tipoAtual = "insumo";  // insumo | preparo
-const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
-let GERADO_EM = null;
+async function token(){
+  if (!conta) return null;
+  try{
+    const r = await msalApp.acquireTokenSilent({ scopes: CFG.escopos, account: conta });
+    return r.accessToken;
+  }catch(e){
+    await msalApp.acquireTokenRedirect({ scopes: CFG.escopos, account: conta });
+    return null;
+  }
+}
 
-const $ = s => document.querySelector(s);
-const val = f => (f && typeof f === "object") ? f.Value : f;
+function entrar(){ msalApp.loginRedirect({ scopes: CFG.escopos }); }
+function sair(){ msalApp.logoutRedirect({ account: conta }); }
 
+/* ----------------------------------------------------- Graph */
+async function graph(caminho, opcoes){
+  const t = await token();
+  if (!t) throw new Error("sem sessão");
+  const o = opcoes || {};
+  const r = await fetch(caminho.startsWith("http") ? caminho
+                        : "https://graph.microsoft.com/v1.0" + caminho,
+    { method: o.method || "GET", body: o.body,
+      headers: Object.assign({ Authorization: "Bearer " + t,
+                               "Content-Type": "application/json" }, o.headers || {}) });
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()).slice(0, 300));
+  return r.status === 204 ? {} : r.json();
+}
+
+async function lerLista(nome, campos){
+  let url = "/sites/" + CFG.site + "/lists/" + nome +
+            "/items?$top=999&$expand=fields($select=" + campos.join(",") + ")";
+  const saida = [];
+  while (url){
+    const j = await graph(url);
+    (j.value || []).forEach(x => saida.push(Object.assign({ _id: x.id }, x.fields)));
+    url = j["@odata.nextLink"] || null;
+  }
+  return saida;
+}
+
+function gravar(lista, id, campos){
+  return graph("/sites/" + CFG.site + "/lists/" + lista + "/items/" + id + "/fields",
+               { method: "PATCH", body: JSON.stringify(campos) });
+}
+
+/* ----------------------------------------------------- dados */
+const val = v => (v && typeof v === "object") ? (v.Value || v.LookupValue || "") : (v || "");
+
+async function carregar(){
+  $("#app").innerHTML = '<div class="loading">Lendo o cadastro no SharePoint…</div>';
+  const [ins, rec, por, estIns] = await Promise.all([
+    lerLista("Insumos",               ["Title","field_1","field_2","field_3","Almoxarifado","OrdemEstoque","Ativo"]),
+    lerLista("Receitas",              ["Title","field_1","field_3","Ativa"]),
+    lerLista("EstoquePorcionamentos", ["Title","field_1","field_3","field_4","Almoxarifado","OrdemEstoque","Unidade"]),
+    lerLista("EstoqueInsumos",        ["Title","Loja"])
+  ]);
+
+  // A ponte código -> linha gravável. É isto que substitui a lista de Ids
+  // chumbada: o que estiver cadastrado entra, o que não estiver aparece
+  // marcado em vermelho na tela em vez de sumir calado.
+  DEST = {};
+  estIns.forEach(x => { if (x.Title) DEST["INS::" + x.Title + "::" + (SIGLA[val(x.Loja)] || val(x.Loja))] = x._id; });
+  por   .forEach(p => { if (p.Title) DEST["REC::" + p.Title + "::" + (val(p.Unidade) || "SJC")] = p._id; });
+
+  const insumos = ins.filter(i => i.Ativo !== false && i.Title).map(i => ({
+    code: i.Title, nome: val(i.field_1) || i.Title, categoria: val(i.field_2) || "Sem categoria",
+    unidade: val(i.field_3) || "un", unidadeCurta: val(i.field_3) || "un",
+    porcao: null, tipo: "insumo", almox: val(i.Almoxarifado) || "Sem local",
+    ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null)
+  }));
+
+  const PORC = {};
+  por.forEach(p => { if (p.Title) PORC[p.Title] = p; });
+  const preparos = rec.filter(r => r.Ativa !== false && r.Title).map(r => {
+    const p = PORC[r.Title] || {};
+    return {
+      code: r.Title, nome: val(p.field_1) || val(r.field_1) || r.Title,
+      categoria: val(r.field_3) || "Sem categoria",
+      // Preparo se conta em UNIDADE: vem porcionado em saquinho, e uma
+      // porção é um saquinho. O peso da porção vai no subtítulo, que é o
+      // que orienta no caso do que não vem em saquinho (molho a granel).
+      unidade: "un", unidadeCurta: "un", tipo: "preparo",
+      porcao: p.field_3 ? (((+p.field_3) + "").replace(".", ",") + " " + (val(p.field_4) || "g")) : null,
+      almox: val(p.Almoxarifado) || "Sem local",
+      ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null)
+    };
+  });
+
+  ITENS = [...insumos, ...preparos];
+  LIDO_EM = new Date();
+  pintarSelo();
+  montarTabs();
+  render();
+}
+
+function destinoDe(it){
+  const sig = SIGLA[$("#loja").value] || $("#loja").value;
+  return DEST[(it.tipo === "insumo" ? "INS::" : "REC::") + it.code + "::" + sig];
+}
+const gravavel = it => !!destinoDe(it);
+
+/* ----------------------------------------------------- estado local */
 function chaveLS(){ return "contagem::" + $("#loja").value + "::" + $("#data").value; }
-
 function carregarEstado(){
-  try{ estado = JSON.parse(localStorage.getItem(chaveLS()) || "{}"); }
-  catch(e){ estado = {}; }
+  try{ estado = JSON.parse(localStorage.getItem(chaveLS()) || "{}"); }catch(e){ estado = {}; }
 }
 function salvarEstado(){
   localStorage.setItem(chaveLS(), JSON.stringify(estado));
-  $("#savedPill").textContent = "rascunho salvo no aparelho";
-}
-
-async function baixarRaiz(){
-  const r = await fetch(RAW + "?t=" + Date.now(), {cache:"no-store"});
-  if(!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
-}
-
-/* LEITURA GARANTIDAMENTE FRESCA.
-   A CDN do raw.githubusercontent IGNORA a query string: o ?t= NAO fura o cache
-   e ela chega a servir versao de minutos atras. Mas a URL fixada no SHA do
-   commit e IMUTAVEL — logo nunca vem de cache. Entao: pergunta ao GitHub qual
-   o ultimo commit do arquivo e le por esse SHA.
-   Se a API falhar (limite de 60 req/h por IP), cai na leitura normal. */
-async function baixarRaizFresca(){
-  try{
-    const c = await fetch("https://api.github.com/repos/marcius-ai/wayfoods-data/commits"
-                          + "?path=wayfoods_data.json&per_page=1&t=" + Date.now(), {cache:"no-store"});
-    if(!c.ok) throw new Error("api " + c.status);
-    const sha = (await c.json())[0].sha;
-    const r = await fetch("https://raw.githubusercontent.com/marcius-ai/wayfoods-data/"
-                          + sha + "/wayfoods_data.json", {cache:"no-store"});
-    if(!r.ok) throw new Error("raw " + r.status);
-    return r.json();
-  }catch(e){
-    return baixarRaiz();   // degrada para a leitura normal
-  }
-}
-
-function aplicarDados(raiz){
-    const P = k => { const v = raiz[k]; return typeof v === "string" ? JSON.parse(v) : v; };
-    GERADO_EM = raiz.geradoEm || null;
-
-    const insumos = P("insumos").map(i => ({
-      code:i.Title, nome:i.field_1, categoria:val(i.field_2)||"Sem categoria",
-      unidade:val(i.field_3)||"un", unidadeCurta:val(i.field_3)||"un",
-      tipo:"insumo", almox:val(i.Almoxarifado)||"Sem local",
-      ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null)
-    }));
-    // Almoxarifado e OrdemEstoque dos PREPAROS moram em estoquePorcionamentos,
-    // NAO em receitas (essa lista nao tem essas colunas). A lista receitas
-    // continua mandando em "quem esta ativo" e no nome.
-    const PORC = {};
-    (P("estoquePorcionamentos") || []).forEach(p => { if (p.Title) PORC[p.Title] = p; });
-    const preparos = P("receitas").filter(r => r.Ativa !== false).map(r => {
-      const p = PORC[r.Title] || {};
-      return {
-        code:r.Title, nome:(p.field_1 || r.field_1), categoria:val(r.field_3)||"Sem categoria",
-        // Preparo se conta em PORÇÕES: o que vai para field_5 do
-        // EstoquePorcionamentos é número de porções, não peso. O field_4
-        // é a unidade do PESO DA PORÇÃO — exibi-lo aqui fazia a tela pedir
-        // "g" e gravar porção, que é o pior dos dois mundos.
-        // Na prática a equipe conta UNIDADE: o preparo vem porcionado em
-        // saquinho ("quantos estrogonofes tem? 22"). Uma porção = um saquinho.
-        // O peso da porção vai no subtítulo para o caso do que não é saquinho
-        // (molho a granel): ali ela vê que 1 unidade = 75 g.
-        unidade:"un", unidadeCurta:"un", tipo:"preparo",
-        porcao:(p.field_3 ? (((+p.field_3)+"").replace(".",",")+" "+(val(p.field_4)||"g")) : null),
-        almox:val(p.Almoxarifado)||"Sem local",
-        ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null)
-      };
-    });
-    ITENS = [...insumos, ...preparos];
-
-  carregarEstado();
-  montarTabs();
-  render();
-  pintarSelo();
-  $("#salvar").disabled = false;
-}
-
-async function carregar(){
-  try{ aplicarDados(await baixarRaiz()); }
-  catch(e){ $("#app").innerHTML = '<div class="error">Falha ao carregar os dados.<br>'+e.message+'</div>'; }
-}
-
-/* ATUALIZAR CATALOGO — espelha o SharePoint sob demanda.
-   1) chama o fluxo que republica o JSON a partir das listas
-   2) fica conferindo ate o campo geradoEm MUDAR de verdade
-   3) so entao recarrega a tela e diz "pronto"
-   Sem a URL configurada, faz so uma releitura furando o cache. */
-async function sincronizar(){
-  const btn=$("#btnSync"), msg=$("#syncMsg");
-  const antes = GERADO_EM;
-  btn.disabled=true; msg.style.color="var(--sub)";
-  try{
-    // Republicacao SEM fluxo novo e SEM segredo novo:
-    // um MERGE VAZIO (so __metadata, nenhum campo) na linha de RESERVA REC-076
-    // bump o Modified sem alterar dado nenhum -> dispara o gatilho
-    // "WayFoods - Trigger PAI EstoquePorcionamentos" -> republica o JSON.
-    // REC-076 e uma reserva INATIVA: nao aparece na contagem e nada depende dela.
-    const url=getSyncUrl()||getFlowUrl();
-    if(!url){
-      msg.textContent="Buscando a versão mais recente…";
-      aplicarDados(await baixarRaizFresca());
-      msg.textContent="Recarregado. (Este aparelho ainda não foi configurado — peça o link de configuração ao gestor.)";
-      msg.style.color="#b06a00";
-      return;
-    }
-    msg.textContent="Pedindo ao SharePoint os dados novos…";
-    const SITE="https://domrubi.sharepoint.com/sites/WayFoods";
-    await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        uri: SITE+"/_api/web/lists/getbytitle('EstoquePorcionamentos')/items(76)",
-        body: JSON.stringify({__metadata:{type:"SP.Data.EstoquePorcionamentosListItem"}})
-      })});
-    const limite=Date.now()+150000;      // ate 2min30
-    let tentativa=0;
-    while(Date.now()<limite){
-      await new Promise(r=>setTimeout(r,5000));
-      tentativa++;
-      msg.textContent="Atualizando… aguarde ("+(tentativa*5)+"s)";
-      let raiz=null;
-      try{ raiz=await baixarRaizFresca(); }catch(e){ continue; }
-      if(raiz && raiz.geradoEm && raiz.geradoEm!==antes){
-        aplicarDados(raiz);
-        msg.textContent="✅ Catálogo atualizado. Pode contar.";
-        msg.style.color="var(--verde2)";
-        return;
-      }
-    }
-    msg.textContent="⚠ O pedido foi enviado, mas o catálogo ainda não voltou atualizado. Espere 1 minuto e clique de novo.";
-    msg.style.color="#bf0417";
-  }catch(e){
-    msg.textContent="⚠ Não consegui atualizar: "+e.message;
-    msg.style.color="#bf0417";
-  }finally{
-    btn.disabled=false;
-  }
+  const p = $("#savedPill"); p.textContent = "rascunho salvo"; p.style.opacity = 1;
+  clearTimeout(salvarEstado._t);
+  salvarEstado._t = setTimeout(() => { p.style.opacity = 0; }, 1500);
 }
 
 function pintarSelo(){
-  const el = $("#selo"); if(!el) return;
-  if(!GERADO_EM){ el.textContent=""; return; }
-  const d = new Date(GERADO_EM);
-  const horas = (Date.now() - d.getTime()) / 36e5;
-  const quando = d.toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-  let txt, cor;
-  if(horas < 2){ txt = "dados de agora ("+quando+")"; cor = "var(--sub)"; }
-  else if(horas < 24){ txt = "dados de "+quando; cor = "var(--sub)"; }
-  else { txt = "⚠ dados de "+quando+" ("+Math.floor(horas/24)+" dias atras)"; cor = "#bf0417"; }
-  el.textContent = txt; el.style.color = cor;
+  const s = $("#selo");
+  if (!LIDO_EM){ s.textContent = ""; return; }
+  const h = String(LIDO_EM.getHours()).padStart(2,"0") + ":" + String(LIDO_EM.getMinutes()).padStart(2,"0");
+  s.textContent = "cadastro lido às " + h + (conta ? " · " + (conta.username || "") : "");
+}
+
+/* ----------------------------------------------------- abas */
+function listaDoTipo(){
+  const busca = ($("#busca").value || "").trim().toLowerCase();
+  return ITENS.filter(i => i.tipo === tipoAtual)
+              .filter(i => !busca || i.nome.toLowerCase().includes(busca) || i.code.toLowerCase().includes(busca));
 }
 
 function montarTabs(){
-  const presentes = [...new Set(ITENS.filter(i=>i.tipo===tipoAtual).map(i=>i.almox))];
-  // A aba segue a MENOR OrdemEstoque do almoxarifado — ou seja, a sequencia
-  // que a gestora cadastrou no SharePoint. Sem ordem definida, cai na lista
-  // fixa historica e depois em alfabetica.
-  const minOrdem = a => {
-    const v = ITENS.filter(i=>i.tipo===tipoAtual && i.almox===a && i.ordem!=null).map(i=>i.ordem);
-    return v.length ? Math.min(...v) : Infinity;
-  };
-  const ordenadas = presentes.slice().sort((a,b)=>{
-    const oa=minOrdem(a), ob=minOrdem(b);
-    if(oa!==ob) return oa-ob;
-    const ia=ORDEM_ALMOX.indexOf(a), ib=ORDEM_ALMOX.indexOf(b);
-    if(ia!==ib) return (ia<0?99:ia)-(ib<0?99:ib);
-    return a.localeCompare(b,'pt');
+  const porAlmox = {};
+  ITENS.filter(i => i.tipo === tipoAtual).forEach(i => {
+    (porAlmox[i.almox] = porAlmox[i.almox] || []).push(i);
   });
-  if(!abaAtual || !ordenadas.includes(abaAtual)) abaAtual = ordenadas[0];
-  $("#tabs").innerHTML = ordenadas.map(a=>{
-    const n = ITENS.filter(i=>i.tipo===tipoAtual && i.almox===a).length;
-    return '<div class="tab'+(a===abaAtual?' active':'')+'" data-tab="'+a+'">'+a+
-      '<span class="n">'+n+' itens</span></div>';
-  }).join("");
+  const nomes = Object.keys(porAlmox).sort((a,b) => {
+    const ia = ORDEM_ALMOX.indexOf(a), ib = ORDEM_ALMOX.indexOf(b);
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    return a.localeCompare(b);
+  });
+  if (!nomes.includes(abaAtual)) abaAtual = nomes[0] || null;
+  $("#tabs").innerHTML = nomes.map(n =>
+    '<div class="tab' + (n === abaAtual ? ' active' : '') + '" data-almox="' + n.replace(/"/g,'&quot;') + '">' +
+    n + '<small>' + porAlmox[n].length + ' itens</small></div>').join("");
+}
+
+/* ----------------------------------------------------- desenho */
+let fila = [], desenhados = 0, observador = null;
+
+function linhaHTML(i){
+  const q = estado[i.code] || "";
+  const sub = i.code + (i.porcao ? ' · porção ' + i.porcao : ' · ' + i.unidade);
+  return '<div class="item' + (q ? ' filled' : '') + '" data-code="' + i.code + '">' +
+    '<div class="info"><div class="nome">' + i.nome + '</div>' +
+    '<div class="sub">' + sub + '</div>' +
+    (gravavel(i) ? '' : '<div class="sub" style="color:var(--verm);font-weight:600">⚠ sem cadastro de estoque — NÃO será gravado</div>') +
+    '</div>' +
+    '<div class="stepper">' +
+      '<button data-act="dec">−</button>' +
+      '<input class="qty" inputmode="decimal" value="' + q + '" placeholder="0">' +
+      '<button data-act="inc">+</button>' +
+      '<span class="unit">' + (i.unidadeCurta || i.unidade) + '</span>' +
+    '</div></div>';
+}
+
+function desenharMais(){
+  const lote = fila.slice(desenhados, desenhados + POR_PAGINA);
+  if (!lote.length) return;
+  const alvo = $("#lista");
+  if (!alvo) return;
+  alvo.insertAdjacentHTML("beforeend", lote.map(linhaHTML).join(""));
+  desenhados += lote.length;
+  const fim = $("#fim");
+  if (fim) fim.textContent = desenhados < fila.length
+    ? "mostrando " + desenhados + " de " + fila.length + "…" : "";
 }
 
 function render(){
-  const termo = $("#busca").value.trim().toLowerCase();
-  const lista = ITENS.filter(i => i.tipo === tipoAtual && i.almox === abaAtual)
-    .filter(i => !termo || i.nome.toLowerCase().includes(termo) || i.code.toLowerCase().includes(termo));
+  const todos = listaDoTipo();
+  fila = todos.filter(i => !abaAtual || i.almox === abaAtual)
+              .sort((a,b) => {
+                if (a.ordem !== null && b.ordem !== null && a.ordem !== b.ordem) return a.ordem - b.ordem;
+                if ((a.ordem === null) !== (b.ordem === null)) return a.ordem === null ? 1 : -1;
+                return a.nome.localeCompare(b.nome);
+              });
+  desenhados = 0;
+  const preench = fila.filter(i => estado[i.code]).length;
+  $("#app").innerHTML =
+    '<details class="group" open><summary>ORDEM DO ESTOQUE' +
+    '<span class="badge"><b>' + preench + '</b>/' + fila.length + '</span></summary>' +
+    '<div id="lista"></div><div id="fim" class="loading" style="font-size:12px"></div></details>';
 
-  // Se houver OrdemEstoque definida, lista plana na sequência do estoque.
-  // Senão, agrupa por categoria (ordem alfabética, itens por código).
-  const temOrdem = lista.some(i => i.ordem != null);
-  let secoes;
-  if(temOrdem){
-    const ordenada = lista.slice().sort((a,b)=>{
-      if(a.ordem != null && b.ordem != null) return a.ordem - b.ordem;
-      if(a.ordem != null) return -1;
-      if(b.ordem != null) return 1;
-      return a.nome.localeCompare(b.nome,'pt');
-    });
-    secoes = [["Ordem do estoque", ordenada]];
-  } else {
-    const grupos = {};
-    lista.forEach(i => { (grupos[i.categoria] = grupos[i.categoria] || []).push(i); });
-    secoes = Object.keys(grupos).sort((a,b)=>a.localeCompare(b,'pt'))
-      .map(cat => [cat, grupos[cat].sort((a,b)=>a.code.localeCompare(b.code))]);
+  desenharMais();
+  // Desenhar tudo de uma vez trava o celular quando a lista passa de
+  // algumas centenas. O resto entra conforme ela rola.
+  if (observador) observador.disconnect();
+  const fim = $("#fim");
+  if (fim){
+    observador = new IntersectionObserver(e => { if (e[0].isIntersecting) desenharMais(); },
+                                          { rootMargin: "400px" });
+    observador.observe(fim);
   }
-
-  let html = "";
-  if(!lista.length){ html = '<div class="loading">Nenhum item encontrado.</div>'; }
-  secoes.forEach(([titulo, itens]) => {
-    const preench = itens.filter(i => estado[i.code]).length;
-    html += '<details class="group" open><summary>'+titulo+
-      '<span class="badge"><b>'+preench+'</b>/'+itens.length+'</span></summary>';
-    itens.forEach(i => {
-      const q = estado[i.code] || "";
-      const semDestino = !gravavel(i);
-      html += '<div class="item'+(q?' filled':'')+'" data-code="'+i.code+'">'+
-        '<div class="info"><div class="nome">'+i.nome+'</div>'+
-        '<div class="sub">'+i.code+(i.porcao?' · porção '+i.porcao:' · '+i.unidade)+'</div>'+
-        (semDestino ? '<div class="sub" style="color:var(--verm);font-weight:600">⚠ sem cadastro de estoque — NÃO será gravado</div>' : '')+
-        '</div>'+
-        '<div class="stepper">'+
-          '<button data-act="dec">−</button>'+
-          '<input class="qty" inputmode="decimal" value="'+q+'" placeholder="0">'+
-          '<button data-act="inc">+</button>'+
-          '<span class="unit">'+(i.unidadeCurta||i.unidade)+'</span>'+
-        '</div></div>';
-    });
-    html += '</details>';
-  });
-  $("#app").innerHTML = html;
   atualizarContador();
 }
 
 function setQtd(code, v){
-  v = (v+"").replace(",",".").replace(/[^0-9.]/g,"");
-  if(v==="" || v==="0"){ delete estado[code]; } else { estado[code]=v; }
+  if (v === "" || v === null) delete estado[code]; else estado[code] = String(v);
   salvarEstado();
+  const el = document.querySelector('.item[data-code="' + code + '"]');
+  if (el) el.classList.toggle("filled", !!estado[code]);
   atualizarContador();
 }
 
 function atualizarContador(){
-  $("#cont").textContent = Object.keys(estado).length;
+  const n = Object.keys(estado).length;
+  $("#cont").textContent = n;
+  $("#salvar").disabled = n === 0;
 }
 
-// ---- eventos ----
-$("#app").addEventListener("input", e=>{
-  if(e.target.classList.contains("qty")){
-    const row=e.target.closest(".item");
-    setQtd(row.dataset.code, e.target.value);
-    row.classList.toggle("filled", !!estado[row.dataset.code]);
-    const sum=row.closest(".group").querySelector(".badge b");
-    const itens=row.closest(".group").querySelectorAll(".item");
-    sum.textContent=[...itens].filter(it=>estado[it.dataset.code]).length;
-  }
+/* ----------------------------------------------------- eventos */
+$("#app").addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const item = b.closest(".item"), code = item.dataset.code;
+  const inp = item.querySelector(".qty");
+  const atual = parseFloat((inp.value + "").replace(",", ".")) || 0;
+  const novo = b.dataset.act === "inc" ? atual + 1 : Math.max(0, atual - 1);
+  inp.value = novo === 0 ? "" : novo;
+  setQtd(code, inp.value);
 });
-$("#app").addEventListener("click", e=>{
-  const b=e.target.closest("button[data-act]"); if(!b) return;
-  const row=b.closest(".item"); const inp=row.querySelector(".qty");
-  let n=parseFloat((inp.value||"0").replace(",","."))||0;
-  const step = row.querySelector(".sub").textContent.includes(" un") ? 1 : 0.5;
-  n = b.dataset.act==="inc" ? n+step : Math.max(0,n-step);
-  inp.value = Number.isInteger(n)? n : n.toFixed(1);
-  setQtd(row.dataset.code, inp.value);
-  row.classList.toggle("filled", !!estado[row.dataset.code]);
-  const sum=row.closest(".group").querySelector(".badge b");
-  const itens=row.closest(".group").querySelectorAll(".item");
-  sum.textContent=[...itens].filter(it=>estado[it.dataset.code]).length;
+$("#app").addEventListener("input", e => {
+  if (!e.target.classList.contains("qty")) return;
+  setQtd(e.target.closest(".item").dataset.code, e.target.value);
 });
-$("#tabs").addEventListener("click", e=>{
-  const t = e.target.closest(".tab"); if(!t) return;
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  t.classList.add("active"); abaAtual=t.dataset.tab; window.scrollTo(0,0); render();
+$("#tabs").addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (!t) return;
+  abaAtual = t.dataset.almox;
+  $$(".tab").forEach(x => x.classList.toggle("active", x === t));
+  render();
 });
 $("#busca").addEventListener("input", render);
-$("#tipo").addEventListener("change", e=>{tipoAtual=e.target.value; abaAtual=null; $("#busca").value=""; montarTabs(); render();});
-$("#loja").addEventListener("change", ()=>{localStorage.setItem("contagem::ultimaLoja",$("#loja").value);carregarEstado();render();});
-$("#data").addEventListener("change", ()=>{carregarEstado();render();});
+$("#tipo").addEventListener("change", e => {
+  tipoAtual = e.target.value; abaAtual = null; $("#busca").value = "";
+  montarTabs(); render();
+});
+$("#loja").addEventListener("change", () => {
+  localStorage.setItem("contagem::ultimaLoja", $("#loja").value);
+  carregarEstado(); render();
+});
+$("#data").addEventListener("change", () => { carregarEstado(); render(); });
 
-$("#salvar").addEventListener("click", ()=>{
-  const linhas = Object.keys(estado).map(code=>{
-    const it = ITENS.find(i=>i.code===code);
-    return { Item:code, Tipo:it.tipo==="insumo"?"Insumo":"Preparo",
-             Quantidade:parseFloat(estado[code]), Unidade:it.unidade };
+$("#salvar").addEventListener("click", () => {
+  const linhas = Object.keys(estado).map(code => {
+    const it = ITENS.find(i => i.code === code) || {};
+    return { Item: code, Tipo: it.tipo === "insumo" ? "Insumo" : "Preparo",
+             Quantidade: parseFloat(estado[code]), Unidade: it.unidade };
   });
-  const payload = { Loja:$("#loja").value, DataContagem:$("#data").value, Itens:linhas };
-  const [a,m,d]=$("#data").value.split("-");
-  $("#resumoEnvio").innerHTML = 'Loja: <b style="color:var(--verde)">'+$("#loja").value+'</b>'+
-    '<br>Data: <b>'+d+'/'+m+'/'+a+'</b> · <b>'+linhas.length+'</b> itens';
-  $("#payload").textContent = JSON.stringify(payload, null, 2);
-  const ehPiloto = $("#loja").value === LOJA_PILOTO;
-  $("#envioStatus").textContent = ehPiloto ? "" : "Piloto: gravação só para São José dos Campos por enquanto.";
-  $("#envioStatus").style.color = ehPiloto ? "var(--sub)" : "var(--verm)";
-  $("#btnEnviar").disabled = !ehPiloto;
+  const semDestino = Object.keys(estado).filter(c => {
+    const it = ITENS.find(i => i.code === c); return it && !gravavel(it);
+  });
+  const [a,m,d] = $("#data").value.split("-");
+  $("#resumoEnvio").innerHTML =
+    'Loja: <b style="color:var(--verde)">' + $("#loja").value + '</b>' +
+    '<br>Data: <b>' + d + '/' + m + '/' + a + '</b> · <b>' + linhas.length + '</b> itens' +
+    '<br>Gravando como: <b>' + ((conta && conta.username) || "—") + '</b>' +
+    (semDestino.length ? '<br><span style="color:var(--verm);font-weight:600">⚠ ' + semDestino.length +
+      ' sem cadastro de estoque — não serão gravados</span>' : '');
+  $("#payload").textContent = JSON.stringify(
+    { Loja: $("#loja").value, DataContagem: $("#data").value, Itens: linhas }, null, 2);
+  $("#envioStatus").textContent = conta ? "" : "Entre com a conta da empresa para gravar.";
+  $("#envioStatus").style.color = conta ? "var(--sub)" : "var(--verm)";
+  $("#btnEnviar").disabled = !conta;
   $("#modal").classList.add("show");
 });
-$("#fechar").addEventListener("click", ()=>$("#modal").classList.remove("show"));
+$("#fechar").addEventListener("click", () => $("#modal").classList.remove("show"));
 
 async function enviar(){
-  const st=$("#envioStatus"), btn=$("#btnEnviar");
-  let url = getFlowUrl();
-  if(!url){
-    url = (prompt("Este aparelho ainda não foi configurado para gravar. Chame o responsável (Marcius) para configurar. (URL de gravação):")||"").trim();
-    if(!url){ return; }
-    localStorage.setItem("contagem::flowUrl", url);
-  }
+  const st = $("#envioStatus"), btn = $("#btnEnviar");
   const iso = new Date().toISOString();
-  const reqs=[]; const ignorados=[];
-  Object.keys(estado).forEach(code=>{
-    const it=ITENS.find(i=>i.code===code); if(!it) return;
-    const qtd=parseFloat((estado[code]+"").replace(",","."))||0;
-    if(it.tipo==="insumo"){
-      const id=ID_SJC[code]; if(!id){ ignorados.push(code); return; }
-      reqs.push({uri:"_api/web/lists/getbytitle('EstoqueInsumos')/items("+id+")",
-        body:JSON.stringify({"__metadata":{"type":"SP.Data.EstoqueInsumosListItem"},"EstoqueAtual":qtd,"DataContagem":iso})});
-    } else {
-      const n=+code.slice(4); const id=(n>=1&&n<=MAX_REC)?n:null; if(!id){ ignorados.push(code); return; }
-      reqs.push({uri:"_api/web/lists/getbytitle('EstoquePorcionamentos')/items("+id+")",
-        body:JSON.stringify({"__metadata":{"type":"SP.Data.EstoquePorcionamentosListItem"},"field_5":qtd})});
-    }
+  const tarefas = [], ignorados = [];
+  Object.keys(estado).forEach(code => {
+    const it = ITENS.find(i => i.code === code); if (!it) return;
+    const id = destinoDe(it);
+    if (!id){ ignorados.push(code); return; }
+    const qtd = parseFloat((estado[code] + "").replace(",", ".")) || 0;
+    tarefas.push(it.tipo === "insumo"
+      ? { lista: "EstoqueInsumos",        id, campos: { EstoqueAtual: qtd, DataContagem: iso } }
+      : { lista: "EstoquePorcionamentos", id, campos: { field_5: qtd } });
   });
-  if(!reqs.length){ st.textContent="Nada para enviar."; st.style.color="var(--sub)"; return; }
-  btn.disabled=true; let ok=0, fail=0;
-  for(let i=0;i<reqs.length;i+=6){
-    const res=await Promise.allSettled(reqs.slice(i,i+6).map(x=>
-      fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(x)})));
-    res.forEach(r=>{ if(r.status==="fulfilled" && r.value.ok) ok++; else fail++; });
-    st.textContent="Enviando… "+(ok+fail)+"/"+reqs.length; st.style.color="var(--sub)";
+  if (!tarefas.length){ st.textContent = "Nada para gravar."; st.style.color = "var(--sub)"; return; }
+
+  btn.disabled = true;
+  let ok = 0, falhou = 0;
+  for (let i = 0; i < tarefas.length; i += 6){
+    const r = await Promise.allSettled(tarefas.slice(i, i + 6)
+      .map(t => gravar(t.lista, t.id, t.campos)));
+    r.forEach(x => x.status === "fulfilled" ? ok++ : falhou++);
+    st.textContent = "Gravando… " + (ok + falhou) + "/" + tarefas.length;
+    st.style.color = "var(--sub)";
   }
-  // "Enviados" e não "Gravados": o fluxo responde 202 (aceitou) antes de o
-  // SharePoint confirmar a escrita. Só o fluxo sabe se o MERGE deu certo.
-  st.innerHTML="✅ Enviados <b>"+ok+"</b> itens"+(fail?" · <b style='color:var(--verm)'>"+fail+" falha(s)</b>":"")+
+  // "Gravado" de verdade: o PATCH do Graph só volta OK depois que o
+  // SharePoint confirmou. Diferente do fluxo antigo, que respondia 202
+  // antes de escrever.
+  st.innerHTML = "✅ Gravados <b>" + ok + "</b> itens" +
+    (falhou ? " · <b style='color:var(--verm)'>" + falhou + " falha(s)</b>" : "") +
     (ignorados.length
-      ? "<div style='margin-top:8px;padding:8px 10px;border-radius:10px;background:#fdeaec;"+
-        "border:1px solid var(--verm);color:var(--verm);font-size:13px;font-weight:600'>"+
-        "⚠ "+ignorados.length+" item(ns) NÃO foram gravados — sem cadastro de estoque:<br>"+
-        "<span style='font-weight:400'>"+ignorados.join(", ")+"</span><br>"+
-        "<span style='font-weight:400'>Anote esses no papel e avise o gestor.</span></div>"
+      ? "<div style='margin-top:8px;padding:8px 10px;border-radius:10px;background:#fdeaec;" +
+        "border:1px solid var(--verm);color:var(--verm);font-size:13px;font-weight:600'>⚠ " +
+        ignorados.length + " item(ns) sem cadastro de estoque:<br><span style='font-weight:400'>" +
+        ignorados.join(", ") + "</span><br><span style='font-weight:400'>Anote no papel e avise o gestor.</span></div>"
       : "");
-  st.style.color="var(--verde2)";
-  btn.disabled=false;
+  st.style.color = "var(--verde)";
+  if (ok && !falhou){
+    estado = {}; salvarEstado(); render();
+  }
+  btn.disabled = false;
 }
 $("#btnEnviar").addEventListener("click", enviar);
-$("#btnSync").addEventListener("click", sincronizar);
 
-// configuração da URL de gravação via link (o gestor abre 1x em cada aparelho):
-//   contagem.html#cfg=<url-de-gravacao-encodada>
-(function(){
-  const h = location.hash || "";
-  const m = h.match(/cfg=([^&]+)/);
-  const ms = h.match(/sync=([^&]+)/);
-  if(m || ms){
-    const feito=[];
-    if(m){ try{ const u=decodeURIComponent(m[1]).trim(); if(u){ localStorage.setItem("contagem::flowUrl",u); feito.push("gravar a contagem"); } }catch(e){} }
-    if(ms){ try{ const u=decodeURIComponent(ms[1]).trim(); if(u){ localStorage.setItem("contagem::syncUrl",u); feito.push("atualizar o catálogo"); } }catch(e){} }
-    history.replaceState(null,"",location.pathname+location.search);
-    alert("✅ Aparelho configurado para: "+feito.join(" e ")+".");
+$("#btnSync").addEventListener("click", async () => {
+  const b = $("#btnSync"), m = $("#syncMsg");
+  b.disabled = true; m.style.color = "var(--sub)"; m.textContent = "Lendo o cadastro…";
+  try{ await carregar(); m.textContent = "Catálogo atualizado."; }
+  catch(e){ m.textContent = "Não consegui ler: " + e.message; m.style.color = "var(--verm)"; }
+  b.disabled = false;
+});
+
+/* ----------------------------------------------------- partida */
+const hoje = new Date();
+$("#data").value = hoje.getFullYear() + "-" +
+  String(hoje.getMonth()+1).padStart(2,"0") + "-" + String(hoje.getDate()).padStart(2,"0");
+const ultimaLoja = localStorage.getItem("contagem::ultimaLoja");
+if (ultimaLoja) $("#loja").value = ultimaLoja;
+carregarEstado();
+
+(async function(){
+  try{
+    await iniciarAuth();
+  }catch(e){
+    $("#app").innerHTML = '<div class="loading" style="color:var(--verm)">Falha ao iniciar o login: ' + e.message + '</div>';
+    return;
+  }
+  if (!conta){
+    $("#app").innerHTML =
+      '<div class="loading" style="padding:28px 16px">' +
+      '<p style="margin:0 0 14px">Entre com a sua conta da Way Foods para contar.</p>' +
+      '<button class="btn" id="btnEntrar" style="padding:12px 22px">Entrar com a conta Microsoft</button></div>';
+    $("#btnEntrar").addEventListener("click", entrar);
+    return;
+  }
+  try{ await carregar(); }
+  catch(e){
+    $("#app").innerHTML = '<div class="loading" style="color:var(--verm)">Não consegui ler o cadastro: ' +
+      e.message + '</div>';
   }
 })();
 
-// data default = hoje
-const hoje=new Date(); $("#data").value=
-  hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0")+"-"+String(hoje.getDate()).padStart(2,"0");
-
-// restaura a última loja usada neste aparelho
-const ultimaLoja = localStorage.getItem("contagem::ultimaLoja");
-if(ultimaLoja){ const op=[...$("#loja").options].some(o=>o.value===ultimaLoja); if(op) $("#loja").value=ultimaLoja; }
-
-carregar();
 </script>
 </body>
 </html>
