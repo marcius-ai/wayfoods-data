@@ -133,7 +133,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v17</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v18</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -232,15 +232,30 @@ async function iniciarAuth(){
   return conta;
 }
 
+// Erro proprio para "precisa entrar de novo": permite tratar isso na tela
+// em vez de vazar texto tecnico para quem esta contando.
+function SessaoExpirada(){ this.nome = "SessaoExpirada"; }
+
+let tokenCache = { valor: null, expira: 0 };
+let tokenEmVoo = null;
+
 async function token(){
-  if (!conta) return null;
-  try{
-    const r = await msalApp.acquireTokenSilent({ scopes: CFG.escopos, account: conta });
-    return r.accessToken;
-  }catch(e){
-    await msalApp.acquireTokenRedirect({ scopes: CFG.escopos, account: conta });
-    return null;
+  if (!conta) throw new SessaoExpirada();
+  if (tokenCache.valor && Date.now() < tokenCache.expira - 60000) return tokenCache.valor;
+  // UMA aquisicao por vez. A carga dispara 4 leituras em paralelo; sem esta
+  // trava, as 4 pedem token juntas, o MSAL recusa interacao concorrente
+  // (interaction_in_progress) e a tela inteira morre.
+  if (!tokenEmVoo){
+    tokenEmVoo = msalApp.acquireTokenSilent({ scopes: CFG.escopos, account: conta })
+      .then(r => {
+        tokenCache = { valor: r.accessToken,
+                       expira: r.expiresOn ? r.expiresOn.getTime() : Date.now() + 50*60000 };
+        return r.accessToken;
+      })
+      .finally(() => { tokenEmVoo = null; });
   }
+  try{ return await tokenEmVoo; }
+  catch(e){ throw new SessaoExpirada(); }
 }
 
 // domain_hint pula a pergunta "conta pessoal ou corporativa". Existe uma
@@ -257,7 +272,6 @@ function sair(){ msalApp.logoutRedirect({ account: conta }); }
 /* ----------------------------------------------------- Graph */
 async function graph(caminho, opcoes){
   const t = await token();
-  if (!t) throw new Error("sem sessão");
   const o = opcoes || {};
   const r = await fetch(caminho.startsWith("http") ? caminho
                         : "https://graph.microsoft.com/v1.0" + caminho,
@@ -287,6 +301,25 @@ function gravar(lista, id, campos){
 
 /* ----------------------------------------------------- dados */
 const val = v => (v && typeof v === "object") ? (v.Value || v.LookupValue || "") : (v || "");
+
+function tratarFalhaDeCarga(e){
+  if (e instanceof SessaoExpirada || e.nome === "SessaoExpirada"){
+    $("#app").innerHTML =
+      '<div class="loading" style="padding:28px 16px">' +
+      '<p style="margin:0 0 6px"><b>Sua sessão expirou.</b></p>' +
+      '<p style="margin:0 0 14px;font-size:13px">Entre de novo para continuar a contagem. ' +
+      'O que você já digitou está guardado neste aparelho.</p>' +
+      '<button class="btn" id="btnEntrar2" style="padding:12px 22px">Entrar de novo</button></div>';
+    $("#btnEntrar2").addEventListener("click", entrar);
+    return;
+  }
+  $("#app").innerHTML =
+    '<div class="loading" style="padding:28px 16px;color:var(--verm)">' +
+    '<p style="margin:0 0 12px">Não consegui ler o cadastro.</p>' +
+    '<p style="margin:0 0 14px;font-size:12px;opacity:.8">' + (e.message || "") + '</p>' +
+    '<button class="btn" id="btnTentar" style="padding:12px 22px">Tentar de novo</button></div>';
+  $("#btnTentar").addEventListener("click", () => carregar().catch(tratarFalhaDeCarga));
+}
 
 async function carregar(){
   $("#app").innerHTML = '<div class="loading">Lendo o cadastro no SharePoint…</div>';
@@ -565,7 +598,7 @@ $("#btnSync").addEventListener("click", async () => {
   const b = $("#btnSync"), m = $("#syncMsg");
   b.disabled = true; m.style.color = "var(--sub)"; m.textContent = "Lendo o cadastro…";
   try{ await carregar(); m.textContent = "Catálogo atualizado."; }
-  catch(e){ m.textContent = "Não consegui ler: " + e.message; m.style.color = "var(--verm)"; }
+  catch(e){ m.textContent = ""; tratarFalhaDeCarga(e); }
   b.disabled = false;
 });
 
@@ -604,10 +637,7 @@ carregarEstado();
     return;
   }
   try{ await carregar(); }
-  catch(e){
-    $("#app").innerHTML = '<div class="loading" style="color:var(--verm)">Não consegui ler o cadastro: ' +
-      e.message + '</div>';
-  }
+  catch(e){ tratarFalhaDeCarga(e); }
 })();
 
 </script>
