@@ -133,7 +133,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v15</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v16</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -201,6 +201,19 @@ const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
 /* ----------------------------------------------------- identidade */
 let msalApp = null, conta = null;
 
+let erroLogin = "";
+
+function traduzirErro(e){
+  const m = (e && (e.errorMessage || e.message)) || "";
+  if (/AADSTS50020/.test(m))
+    return "Você entrou com uma <b>conta pessoal</b> da Microsoft, não com a conta da " +
+           "empresa. Toque em <b>Sair da conta</b> abaixo e entre de novo — vai aparecer " +
+           "direto a tela da Way Foods.";
+  if (/AADSTS65004|consent/i.test(m))
+    return "Falta autorização para este aplicativo. Avise o Marcius.";
+  return m ? ("Não consegui entrar: " + m.slice(0, 200)) : "";
+}
+
 async function iniciarAuth(){
   msalApp = new msal.PublicClientApplication({
     auth: { clientId: CFG.clientId, authority: CFG.authority,
@@ -210,7 +223,9 @@ async function iniciarAuth(){
     cache: { cacheLocation: "localStorage" }
   });
   await msalApp.initialize();
-  const r = await msalApp.handleRedirectPromise();
+  let r = null;
+  try{ r = await msalApp.handleRedirectPromise(); }
+  catch(e){ erroLogin = traduzirErro(e); }
   if (r && r.account) conta = r.account;
   if (!conta) conta = msalApp.getAllAccounts()[0] || null;
   if (conta) msalApp.setActiveAccount(conta);
@@ -228,7 +243,15 @@ async function token(){
   }
 }
 
-function entrar(){ msalApp.loginRedirect({ scopes: CFG.escopos }); }
+// domain_hint pula a pergunta "conta pessoal ou corporativa". Existe uma
+// conta PESSOAL Microsoft com o mesmo endereço financeiro@domrubi.com.br, e
+// escolher ela dá AADSTS50020 ("does not exist in tenant"). Com o hint, o
+// Entra vai direto para o login da organização.
+function entrar(){
+  msalApp.loginRedirect({ scopes: CFG.escopos,
+                          prompt: "select_account",
+                          extraQueryParameters: { domain_hint: "domrubi.com.br" } });
+}
 function sair(){ msalApp.logoutRedirect({ account: conta }); }
 
 /* ----------------------------------------------------- Graph */
@@ -560,8 +583,19 @@ carregarEstado();
     $("#app").innerHTML =
       '<div class="loading" style="padding:28px 16px">' +
       '<p style="margin:0 0 14px">Entre com a sua conta da Way Foods para contar.</p>' +
-      '<button class="btn" id="btnEntrar" style="padding:12px 22px">Entrar com a conta Microsoft</button></div>';
+      '<button class="btn" id="btnEntrar" style="padding:12px 22px">Entrar com a conta Microsoft</button>' +
+      '<div style="margin-top:10px"><button id="btnSair" style="padding:8px 14px;border-radius:9px;' +
+      'border:1px solid var(--borda);background:#fff;color:var(--sub);font-family:inherit;font-size:13px">' +
+      'Sair da conta</button></div>' +
+      (erroLogin ? '<div style="margin-top:16px;padding:10px 12px;border-radius:10px;background:#fdeaec;' +
+        'border:1px solid var(--verm);color:var(--verm);font-size:13px;text-align:left">' + erroLogin + '</div>' : '') +
+      '</div>';
     $("#btnEntrar").addEventListener("click", entrar);
+    $("#btnSair").addEventListener("click", () => {
+      // limpa o cache do MSAL deste aparelho e volta para a escolha de conta
+      try{ Object.keys(localStorage).filter(k => /^(msal|\{")/.test(k)).forEach(k => localStorage.removeItem(k)); }catch(e){}
+      msalApp.logoutRedirect({ postLogoutRedirectUri: location.origin + location.pathname });
+    });
     return;
   }
   try{ await carregar(); }
