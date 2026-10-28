@@ -133,7 +133,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v16</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v17</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -304,7 +304,14 @@ async function carregar(){
   estIns.forEach(x => { if (x.Title) DEST["INS::" + x.Title + "::" + (SIGLA[val(x.Loja)] || val(x.Loja))] = x._id; });
   por   .forEach(p => { if (p.Title) DEST["REC::" + p.Title + "::" + (val(p.Unidade) || "SJC")] = p._id; });
 
-  const insumos = ins.filter(i => i.Ativo !== false && i.Title).map(i => ({
+  // REGRA DE CONTAGEM (Marcius, 28/10): so entra na contagem quem tem
+  // ALMOXARIFADO e SEQUENCIA DE CONTAGEM. Nao e filtro cosmetico — o cadastro
+  // em Insumos serve tambem para classificar nota fiscal, e boa parte do que
+  // esta ali nao se conta (um pacote de bala comprado uma vez, um micro-ondas).
+  // Preencher a sequencia e o ato de dizer "este entra, nesta posicao".
+  const naContagem = x => !!val(x.Almoxarifado) && typeof x.OrdemEstoque === "number";
+
+  const insumos = ins.filter(i => i.Ativo !== false && i.Title && naContagem(i)).map(i => ({
     code: i.Title, nome: val(i.field_1) || i.Title, categoria: val(i.field_2) || "Sem categoria",
     unidade: val(i.field_3) || "un", unidadeCurta: val(i.field_3) || "un",
     porcao: null, tipo: "insumo", almox: val(i.Almoxarifado) || "Sem local",
@@ -313,7 +320,7 @@ async function carregar(){
 
   const PORC = {};
   por.forEach(p => { if (p.Title) PORC[p.Title] = p; });
-  const preparos = rec.filter(r => r.Ativa !== false && r.Title).map(r => {
+  const preparos = rec.filter(r => r.Ativa !== false && r.Title && naContagem(PORC[r.Title] || {})).map(r => {
     const p = PORC[r.Title] || {};
     return {
       code: r.Title, nome: val(p.field_1) || val(r.field_1) || r.Title,
@@ -416,12 +423,10 @@ function desenharMais(){
 
 function render(){
   const todos = listaDoTipo();
+  // Todo item exibido tem sequencia (a regra garante), entao a ordem da tela
+  // e a ordem fisica de caminhar pelo almoxarifado.
   fila = todos.filter(i => !abaAtual || i.almox === abaAtual)
-              .sort((a,b) => {
-                if (a.ordem !== null && b.ordem !== null && a.ordem !== b.ordem) return a.ordem - b.ordem;
-                if ((a.ordem === null) !== (b.ordem === null)) return a.ordem === null ? 1 : -1;
-                return a.nome.localeCompare(b.nome);
-              });
+              .sort((a,b) => (a.ordem - b.ordem) || a.nome.localeCompare(b.nome));
   desenhados = 0;
   const preench = fila.filter(i => estado[i.code]).length;
   $("#app").innerHTML =
