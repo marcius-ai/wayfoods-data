@@ -145,7 +145,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v22</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v23</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -210,6 +210,7 @@ let tipoAtual = "insumo";
 let LIDO_EM = null;
 let organizando = false;     // modo de arrastar ligado?
 let ordemSuja = false;       // mexeu e ainda nao salvou?
+const movidos = new Set();   // quem foi arrastado desde o ultimo salvamento
 const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
 
 /* ----------------------------------------------------- identidade */
@@ -349,11 +350,16 @@ function tratarFalhaDeCarga(e){
 
 async function carregar(){
   $("#app").innerHTML = '<div class="loading">Lendo o cadastro no SharePoint…</div>';
-  const [ins, rec, por, estIns] = await Promise.all([
-    lerLista("Insumos",               ["Title","field_1","field_2","field_3","Almoxarifado","OrdemEstoque","Ativo"]),
+  const [ins, rec, por, estIns, ipu, unidades] = await Promise.all([
+    lerLista("Insumos",               ["Title","field_1","field_2","field_3","Ativo"]),
     lerLista("Receitas",              ["Title","field_1","field_3","Ativa"]),
     lerLista("EstoquePorcionamentos", ["Title","field_1","field_3","field_4","Almoxarifado","OrdemEstoque","Unidade"]),
-    lerLista("EstoqueInsumos",        ["Title","Loja"])
+    lerLista("EstoqueInsumos",        ["Title","Loja"]),
+    // Quem manda na contagem do INSUMO e o InsumoPorUnidade: e la que vivem
+    // ControlaEstoque, Almoxarifado e OrdemEstoque POR LOJA. O caminho fisico
+    // de SJC nao e o de Suzano, entao a ordem tem mesmo de ser por loja.
+    lerLista("InsumoPorUnidade",      ["InsumoLookupId","UnidadeLookupId","Almoxarifado","OrdemEstoque","ControlaEstoque","Ativo"]),
+    lerLista("Unidades",              ["Title","Nome"])
   ]);
 
   // A ponte código -> linha gravável. É isto que substitui a lista de Ids
@@ -370,14 +376,30 @@ async function carregar(){
   // Preencher a sequencia e o ato de dizer "este entra, nesta posicao".
   const naContagem = x => !!val(x.Almoxarifado) && typeof x.OrdemEstoque === "number";
 
-  const insumos = ins.filter(i => i.Ativo !== false && i.Title && naContagem(i)).map(i => ({
-    code: i.Title, nome: val(i.field_1) || i.Title, categoria: val(i.field_2) || "Sem categoria",
-    unidade: val(i.field_3) || "un", unidadeCurta: val(i.field_3) || "un",
-    porcao: null, tipo: "insumo", almox: val(i.Almoxarifado) || "Sem local",
-    ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null),
-    // onde mora o campo de ordem deste item, para poder regravar
-    ordemLista: "Insumos", ordemId: i._id
-  }));
+  // sigla da loja desta linha do IPU (as Unidades guardam SJC / SZN)
+  const SIG_UNID = {};
+  unidades.forEach(u => { SIG_UNID[u._id] = val(u.Title); });
+  const CAT_INS = {};
+  ins.forEach(i => { if (i.Ativo !== false && i.Title) CAT_INS[i._id] = i; });
+
+  const insumos = ipu
+    .filter(x => x.Ativo !== false
+              && x.ControlaEstoque === true          // o que nao se conta nem aparece
+              && CAT_INS[x.InsumoLookupId]
+              && naContagem(x))                      // almoxarifado + sequencia
+    .map(x => {
+      const i = CAT_INS[x.InsumoLookupId];
+      return {
+        code: i.Title, nome: val(i.field_1) || i.Title,
+        categoria: val(i.field_2) || "Sem categoria",
+        unidade: val(i.field_3) || "un", unidadeCurta: val(i.field_3) || "un",
+        porcao: null, tipo: "insumo", almox: val(x.Almoxarifado) || "Sem local",
+        loja: SIG_UNID[x.UnidadeLookupId] || "",
+        ordem: (typeof x.OrdemEstoque === "number" ? x.OrdemEstoque : null),
+        // a ordem agora se regrava no IPU: sem valor unico e aceita decimal
+        ordemLista: "InsumoPorUnidade", ordemId: x._id
+      };
+    });
 
   const PORC = {};
   por.forEach(p => { if (p.Title) PORC[p.Title] = p; });
@@ -392,6 +414,7 @@ async function carregar(){
       unidade: "un", unidadeCurta: "un", tipo: "preparo",
       porcao: p.field_3 ? (((+p.field_3) + "").replace(".", ",") + " " + (val(p.field_4) || "g")) : null,
       almox: val(p.Almoxarifado) || "Sem local",
+      loja: val(p.Unidade) || "SJC",
       ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null),
       ordemLista: "EstoquePorcionamentos", ordemId: p._id
     };
@@ -460,15 +483,17 @@ function pintarSelo(){
 }
 
 /* ----------------------------------------------------- abas */
+function lojaAtual(){ return SIGLA[$("#loja").value] || $("#loja").value; }
+
 function listaDoTipo(){
   const busca = ($("#busca").value || "").trim().toLowerCase();
-  return ITENS.filter(i => i.tipo === tipoAtual)
+  return ITENS.filter(i => i.tipo === tipoAtual && i.loja === lojaAtual())
               .filter(i => !busca || i.nome.toLowerCase().includes(busca) || i.code.toLowerCase().includes(busca));
 }
 
 function montarTabs(){
   const porAlmox = {};
-  ITENS.filter(i => i.tipo === tipoAtual).forEach(i => {
+  ITENS.filter(i => i.tipo === tipoAtual && i.loja === lojaAtual()).forEach(i => {
     (porAlmox[i.almox] = porAlmox[i.almox] || []).push(i);
   });
   const nomes = Object.keys(porAlmox).sort((a,b) => {
@@ -609,7 +634,7 @@ function ativarArrasto(){
         anterior.before(alvo);               // sobe uma posicao
         inicioY += ra.height; desloc -= ra.height;
         alvo.style.transform = "translateY(" + desloc + "px)";
-        ordemSuja = true;
+        ordemSuja = true; movidos.add(alvo.dataset.code);
       }
     }
     if (proximo){
@@ -618,7 +643,7 @@ function ativarArrasto(){
         proximo.after(alvo);                 // desce uma posicao
         inicioY -= rp.height; desloc += rp.height;
         alvo.style.transform = "translateY(" + desloc + "px)";
-        ordemSuja = true;
+        ordemSuja = true; movidos.add(alvo.dataset.code);
       }
     }
     // rola sozinho perto das bordas, senao listas longas ficam impossiveis
@@ -649,56 +674,42 @@ function pintarBotaoOrdem(){
 async function salvarOrdem(){
   const b = $("#btnOrganizar"), m = $("#syncMsg");
   const linhas = [...document.querySelectorAll("#lista .item")].map(el => el.dataset.code);
-  const itens = linhas.map(c => ITENS.find(i => i.code === c)).filter(Boolean);
-  // Reaproveita os MESMOS numeros que ja existiam nesta aba, so que na ordem
-  // nova. Assim nao se inventa numeracao nem se cria choque com outras abas.
-  const numeros = itens.map(i => i.ordem).filter(n => typeof n === "number").sort((a, b2) => a - b2);
+  const visiveis = linhas.map(c => ITENS.find(i => i.code === c && i.loja === lojaAtual())).filter(Boolean);
+
+  // PONTO MEDIO: o item arrastado recebe um numero entre os dois vizinhos
+  // (entre 2 e 3 vira 2,5). Isso grava SO quem foi movido, e nao precisa
+  // mexer em mais ninguem. So da para fazer assim porque a ordem agora vive
+  // no InsumoPorUnidade / EstoquePorcionamentos, onde o campo aceita decimal
+  // e nao exige valor unico -- em Insumos exigia, e por isso a v22 tinha de
+  // estacionar os valores antes de entregar os definitivos.
   const mudou = [];
-  itens.forEach((it, ix) => {
-    const novo = numeros[ix];
-    if (typeof novo === "number" && novo !== it.ordem) mudou.push({ it, novo });
+  visiveis.forEach((it, ix) => {
+    if (!movidos.has(it.code)) return;
+    const ant = visiveis[ix - 1], dep = visiveis[ix + 1];
+    let novo;
+    if (ant && dep)      novo = (ant.ordem + dep.ordem) / 2;
+    else if (ant)        novo = ant.ordem + 1;
+    else if (dep)        novo = dep.ordem - 1;
+    else                 return;
+    novo = Math.round(novo * 1000) / 1000;
+    if (novo !== it.ordem){ it.ordem = novo; mudou.push(it); }
   });
-  if (!mudou.length){ m.textContent = "A ordem não mudou."; return; }
+
+  if (!mudou.length){ m.textContent = "A ordem não mudou."; movidos.clear(); return; }
 
   b.disabled = true; m.style.color = "var(--sub)"; m.textContent = "Salvando a ordem…";
-
-  // O campo OrdemEstoque de Insumos exige VALOR UNICO e so aceita inteiro.
-  // Reordenar e trocar numeros entre linhas, entao gravar direto bate em
-  // "unique constraints already has the provided value" e falha tudo.
-  // Solucao: estacionar os envolvidos bem acima do intervalo em uso e so
-  // depois dar o numero final -- ai nenhum choca com ninguem.
-  const maiorEmUso = Math.max(0, ...ITENS.map(i => typeof i.ordem === "number" ? i.ordem : 0));
-  const PARADA = maiorEmUso + 100000;
-
-  let ok = 0, falhou = 0;
-  const emLotes = async (tarefas) => {
-    const saida = [];
-    for (let i = 0; i < tarefas.length; i += 5)
-      saida.push(...await Promise.allSettled(tarefas.slice(i, i + 5).map(f => f())));
-    return saida;
-  };
-
-  // etapa 1: libera os numeros
-  const estacionou = await emLotes(mudou.map((x, k) => () =>
-    gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: PARADA + k })));
-  const presos = [];
-  estacionou.forEach((r, k) => { if (r.status === "fulfilled") presos.push(mudou[k]); else falhou++; });
-
-  // etapa 2: entrega o numero definitivo
-  const final = await emLotes(presos.map(x => () =>
-    gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: x.novo })));
-  const encalhados = [];
-  final.forEach((r, k) => {
-    if (r.status === "fulfilled"){ ok++; presos[k].it.ordem = presos[k].novo; }
-    else { falhou++; encalhados.push(presos[k].it.code); }
-  });
-
+  let ok = 0, falhou = 0; const ruins = [];
+  for (let i = 0; i < mudou.length; i += 5){
+    const r = await Promise.allSettled(mudou.slice(i, i + 5).map(x =>
+      gravar(x.ordemLista, x.ordemId, { OrdemEstoque: x.ordem })));
+    r.forEach((x, k) => { if (x.status === "fulfilled") ok++; else { falhou++; ruins.push(mudou[i + k].code); } });
+    m.textContent = "Salvando a ordem… " + (ok + falhou) + "/" + mudou.length;
+  }
   m.textContent = !falhou
     ? ("Ordem salva: " + ok + " item(ns) mudaram de lugar.")
-    : ("Ordem salva em " + ok + ", com " + falhou + " falha(s)" +
-       (encalhados.length ? " — refaça o arrasto de: " + encalhados.join(", ") : "") + ".");
+    : ("Ordem salva em " + ok + ", com " + falhou + " falha(s) — refaça: " + ruins.join(", "));
   m.style.color = falhou ? "var(--verm)" : "var(--verde)";
-  ordemSuja = !!falhou; b.disabled = false; pintarBotaoOrdem();
+  ordemSuja = !!falhou; movidos.clear(); b.disabled = false; pintarBotaoOrdem();
 }
 
 function setQtd(code, v){
