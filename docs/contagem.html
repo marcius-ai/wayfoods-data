@@ -49,7 +49,18 @@
   .group>summary .badge{font-size:11px;color:var(--sub);font-weight:600;text-transform:none;letter-spacing:0}
   .group>summary .badge b{color:var(--verde2)}
 
-  .item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--borda)}
+  .item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--borda);
+    background:var(--card)}
+  /* alca de arrasto: so aparece no modo Organizar. Sem alca dedicada, o
+     arrasto briga com o rolar da tela e com os campos de numero. */
+  .alca{flex:0 0 auto;width:38px;height:40px;display:none;align-items:center;justify-content:center;
+    font-size:19px;color:var(--sub);border:1px solid var(--borda);border-radius:9px;background:#faf7f1;
+    touch-action:none;cursor:grab;user-select:none}
+  .organizando .alca{display:flex}
+  .organizando .stepper{display:none}
+  .organizando .item{padding:11px 14px}
+  .item.pegando{box-shadow:0 10px 22px rgba(0,0,0,.18);border-radius:12px;position:relative;z-index:30;
+    border-top-color:transparent;background:#fffdf6}
   .item .info{flex:1;min-width:0}
   /* Duas linhas: nome de preparo é longo ("Estrogonofe de Iscas de Carnes
      na Mostarda") e cortar no meio deixa a pessoa sem saber o que contar. */
@@ -123,6 +134,7 @@
   </div>
   <div class="syncrow">
     <button class="btn2" id="btnSync">🔄 Atualizar catálogo</button>
+    <button class="btn2" id="btnOrganizar">↕️ Organizar ordem</button>
     <div class="syncmsg" id="syncMsg">Clique antes de começar a contagem.</div>
   </div>
   <div class="tabs" id="tabs"></div>
@@ -133,7 +145,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v20</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v21</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -196,6 +208,8 @@ let estado = {};           // code -> quantidade (texto)
 let abaAtual = null;
 let tipoAtual = "insumo";
 let LIDO_EM = null;
+let organizando = false;     // modo de arrastar ligado?
+let ordemSuja = false;       // mexeu e ainda nao salvou?
 const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
 
 /* ----------------------------------------------------- identidade */
@@ -360,7 +374,9 @@ async function carregar(){
     code: i.Title, nome: val(i.field_1) || i.Title, categoria: val(i.field_2) || "Sem categoria",
     unidade: val(i.field_3) || "un", unidadeCurta: val(i.field_3) || "un",
     porcao: null, tipo: "insumo", almox: val(i.Almoxarifado) || "Sem local",
-    ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null)
+    ordem: (typeof i.OrdemEstoque === "number" ? i.OrdemEstoque : null),
+    // onde mora o campo de ordem deste item, para poder regravar
+    ordemLista: "Insumos", ordemId: i._id
   }));
 
   const PORC = {};
@@ -376,7 +392,8 @@ async function carregar(){
       unidade: "un", unidadeCurta: "un", tipo: "preparo",
       porcao: p.field_3 ? (((+p.field_3) + "").replace(".", ",") + " " + (val(p.field_4) || "g")) : null,
       almox: val(p.Almoxarifado) || "Sem local",
-      ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null)
+      ordem: (typeof p.OrdemEstoque === "number" ? p.OrdemEstoque : null),
+      ordemLista: "EstoquePorcionamentos", ordemId: p._id
     };
   });
 
@@ -466,6 +483,7 @@ function linhaHTML(i){
   const q = estado[i.code] || "";
   const sub = i.code + (i.porcao ? ' · porção ' + i.porcao : ' · ' + i.unidade);
   return '<div class="item' + (q ? ' filled' : '') + '" data-code="' + i.code + '">' +
+    '<div class="alca" data-alca>≡</div>' +
     '<div class="info"><div class="nome">' + i.nome + '</div>' +
     '<div class="sub">' + sub + '</div>' +
     (gravavel(i) ? '' : '<div class="sub" style="color:var(--verm);font-weight:600">⚠ sem cadastro de estoque — NÃO será gravado</div>') +
@@ -519,6 +537,15 @@ function render(){
     '<span class="badge"><b>' + preench + '</b>/' + fila.length + '</span></summary>' +
     '<div id="lista"></div><div id="fim" class="loading" style="font-size:12px"></div></details>';
 
+  // No modo Organizar desenha a aba inteira: nao da para arrastar um item
+  // ate uma posicao que ainda nao foi desenhada.
+  if (organizando){
+    $("#app").classList.add("organizando");
+    while (desenhados < fila.length) desenharMais();
+    ativarArrasto();
+    return atualizarContador();
+  }
+  $("#app").classList.remove("organizando");
   desenharMais();
   // Desenhar tudo de uma vez trava o celular quando a lista passa de
   // algumas centenas. O resto entra conforme ela rola.
@@ -530,6 +557,118 @@ function render(){
     observador.observe(fim);
   }
   atualizarContador();
+}
+
+/* ---------------------------------------------------------- arrastar
+   Arrasto com pointer events (o drag-and-drop do HTML nao funciona em
+   toque). A linha sobe um pouco e troca de lugar com a vizinha assim que
+   cruza o meio dela; perto da borda da tela, a lista rola sozinha. */
+function ativarArrasto(){
+  const lista = $("#lista");
+  if (!lista || lista.dataset.arrasto) return;
+  lista.dataset.arrasto = "1";
+
+  let alvo = null, inicioY = 0, desloc = 0, rolagem = 0, animando = null;
+
+  const parar = () => { if (animando){ cancelAnimationFrame(animando); animando = null; } };
+
+  function rolarSozinho(){
+    if (!alvo) return parar();
+    if (rolagem) window.scrollBy(0, rolagem);
+    animando = requestAnimationFrame(rolarSozinho);
+  }
+
+  lista.addEventListener("pointerdown", e => {
+    const h = e.target.closest("[data-alca]");
+    if (!h) return;
+    alvo = h.closest(".item");
+    inicioY = e.clientY; desloc = 0;
+    alvo.classList.add("pegando");
+    alvo.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  lista.addEventListener("pointermove", e => {
+    if (!alvo) return;
+    e.preventDefault();
+    desloc = e.clientY - inicioY;
+    alvo.style.transform = "translateY(" + desloc + "px)";
+
+    const r = alvo.getBoundingClientRect();
+    const anterior = alvo.previousElementSibling;
+    const proximo  = alvo.nextElementSibling;
+    if (anterior){
+      const ra = anterior.getBoundingClientRect();
+      if (r.top < ra.top + ra.height / 2){
+        anterior.before(alvo);               // sobe uma posicao
+        inicioY += ra.height; desloc -= ra.height;
+        alvo.style.transform = "translateY(" + desloc + "px)";
+        ordemSuja = true;
+      }
+    }
+    if (proximo){
+      const rp = proximo.getBoundingClientRect();
+      if (r.bottom > rp.top + rp.height / 2){
+        proximo.after(alvo);                 // desce uma posicao
+        inicioY -= rp.height; desloc += rp.height;
+        alvo.style.transform = "translateY(" + desloc + "px)";
+        ordemSuja = true;
+      }
+    }
+    // rola sozinho perto das bordas, senao listas longas ficam impossiveis
+    const margem = 90;
+    rolagem = e.clientY < margem ? -12
+            : e.clientY > window.innerHeight - margem ? 12 : 0;
+    if (rolagem && !animando) rolarSozinho(); else if (!rolagem) parar();
+  });
+
+  const soltar = () => {
+    if (!alvo) return;
+    alvo.classList.remove("pegando");
+    alvo.style.transform = "";
+    alvo = null; rolagem = 0; parar();
+    pintarBotaoOrdem();
+  };
+  lista.addEventListener("pointerup", soltar);
+  lista.addEventListener("pointercancel", soltar);
+}
+
+function pintarBotaoOrdem(){
+  const b = $("#btnOrganizar");
+  b.textContent = !organizando ? "↕️ Organizar ordem"
+                 : ordemSuja   ? "💾 Salvar ordem"
+                 : "✓ Pronto";
+}
+
+async function salvarOrdem(){
+  const b = $("#btnOrganizar"), m = $("#syncMsg");
+  const linhas = [...document.querySelectorAll("#lista .item")].map(el => el.dataset.code);
+  const itens = linhas.map(c => ITENS.find(i => i.code === c)).filter(Boolean);
+  // Reaproveita os MESMOS numeros que ja existiam nesta aba, so que na ordem
+  // nova. Assim nao se inventa numeracao nem se cria choque com outras abas.
+  const numeros = itens.map(i => i.ordem).filter(n => typeof n === "number").sort((a, b2) => a - b2);
+  const mudou = [];
+  itens.forEach((it, ix) => {
+    const novo = numeros[ix];
+    if (typeof novo === "number" && novo !== it.ordem) mudou.push({ it, novo });
+  });
+  if (!mudou.length){ m.textContent = "A ordem não mudou."; return; }
+
+  b.disabled = true; m.style.color = "var(--sub)"; m.textContent = "Salvando a ordem…";
+  let ok = 0, falhou = 0;
+  for (let i = 0; i < mudou.length; i += 5){
+    const r = await Promise.allSettled(mudou.slice(i, i + 5).map(x =>
+      gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: x.novo })));
+    r.forEach((x, k) => {
+      if (x.status === "fulfilled"){ ok++; mudou[i + k].it.ordem = mudou[i + k].novo; }
+      else falhou++;
+    });
+    m.textContent = "Salvando a ordem… " + (ok + falhou) + "/" + mudou.length;
+  }
+  m.textContent = falhou ? ("Ordem salva em " + ok + ", com " + falhou + " falha(s).")
+                         : ("Ordem salva: " + ok + " item(ns) mudaram de lugar.");
+  m.style.color = falhou ? "var(--verm)" : "var(--verde)";
+  ordemSuja = false; b.disabled = false;
 }
 
 function setQtd(code, v){
@@ -645,6 +784,16 @@ async function enviar(){
   btn.disabled = false;
 }
 $("#btnEnviar").addEventListener("click", enviar);
+
+$("#btnOrganizar").addEventListener("click", async () => {
+  if (organizando && ordemSuja){ await salvarOrdem(); }
+  organizando = !organizando;
+  if (!organizando) $("#syncMsg").textContent = "Clique antes de começar a contagem.";
+  else { $("#syncMsg").style.color = "var(--sub)";
+         $("#syncMsg").textContent = "Arraste pelo ≡ para mudar a ordem."; }
+  pintarBotaoOrdem();
+  render();
+});
 
 $("#btnSync").addEventListener("click", async () => {
   const b = $("#btnSync"), m = $("#syncMsg");
