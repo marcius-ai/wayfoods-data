@@ -133,7 +133,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v19</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v20</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -382,9 +382,33 @@ async function carregar(){
 
   ITENS = [...insumos, ...preparos];
   LIDO_EM = new Date();
+  marcarLojasSemCadastro();
   pintarSelo();
   montarTabs();
   render();
+}
+
+// Quantos destinos de gravacao existem por loja. Hoje praticamente tudo
+// e SJC: Suzano tem 1 linha solta. Sem isto, escolher Suzano enchia a tela
+// de 142 tarjas vermelhas identicas, o que parece defeito do app e e so a
+// loja errada selecionada.
+function destinosPorLoja(){
+  const c = {};
+  Object.keys(DEST).forEach(k => { const sig = k.split("::")[2]; c[sig] = (c[sig] || 0) + 1; });
+  return c;
+}
+
+function cadastroDaLojaAtual(){
+  const sig = SIGLA[$("#loja").value] || $("#loja").value;
+  return destinosPorLoja()[sig] || 0;
+}
+
+function marcarLojasSemCadastro(){
+  const c = destinosPorLoja();
+  [...$("#loja").options].forEach(o => {
+    const n = c[SIGLA[o.value] || o.value] || 0;
+    o.textContent = o.value + (n ? "" : " — sem cadastro");
+  });
 }
 
 function destinoDe(it){
@@ -467,6 +491,22 @@ function desenharMais(){
 }
 
 function render(){
+  // Loja sem nenhum cadastro de estoque: um aviso so, em vez de repetir a
+  // mesma tarja em cada linha da lista.
+  if (!cadastroDaLojaAtual()){
+    $("#app").innerHTML =
+      '<div class="loading" style="padding:26px 16px">' +
+      '<p style="margin:0 0 8px;font-size:15px"><b>Nenhum item cadastrado para ' +
+      $("#loja").value + '.</b></p>' +
+      '<p style="margin:0 0 4px;font-size:13px">O estoque hoje está cadastrado em ' +
+      '<b>São José dos Campos</b>. Se você não é dessa loja, fale com o Marcius ' +
+      'antes de contar — nada aqui seria gravado.</p>' +
+      '<p style="margin:14px 0 0;font-size:13px">Confira o campo <b>Loja</b>, lá em cima.</p>' +
+      '</div>';
+    $("#tabs").innerHTML = "";
+    atualizarContador();
+    return;
+  }
   const todos = listaDoTipo();
   // Todo item exibido tem sequencia (a regra garante), entao a ordem da tela
   // e a ordem fisica de caminhar pelo almoxarifado.
@@ -534,7 +574,7 @@ $("#tipo").addEventListener("change", e => {
 });
 $("#loja").addEventListener("change", () => {
   localStorage.setItem("contagem::ultimaLoja", $("#loja").value);
-  carregarEstado(); render();
+  carregarEstado(); montarTabs(); render();
 });
 $("#data").addEventListener("change", () => { carregarEstado(); render(); });
 
