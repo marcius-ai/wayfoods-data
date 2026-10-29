@@ -145,7 +145,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v21</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v22</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -415,16 +415,22 @@ function destinosPorLoja(){
   return c;
 }
 
+// "Sem cadastro" nao pode significar exatamente zero: Suzano tem UMA linha
+// solta em EstoqueInsumos, e isso bastava para o aviso nao aparecer e a tela
+// encher de tarjas vermelhas de novo.
 function cadastroDaLojaAtual(){
   const sig = SIGLA[$("#loja").value] || $("#loja").value;
   return destinosPorLoja()[sig] || 0;
 }
 
+function lojaAtendida(sig){
+  const n = destinosPorLoja()[sig] || 0;
+  return n >= 20;        // um punhado de linhas soltas nao e cadastro
+}
+
 function marcarLojasSemCadastro(){
-  const c = destinosPorLoja();
   [...$("#loja").options].forEach(o => {
-    const n = c[SIGLA[o.value] || o.value] || 0;
-    o.textContent = o.value + (n ? "" : " — sem cadastro");
+    o.textContent = o.value + (lojaAtendida(SIGLA[o.value] || o.value) ? "" : " — sem cadastro");
   });
 }
 
@@ -511,7 +517,7 @@ function desenharMais(){
 function render(){
   // Loja sem nenhum cadastro de estoque: um aviso so, em vez de repetir a
   // mesma tarja em cada linha da lista.
-  if (!cadastroDaLojaAtual()){
+  if (!lojaAtendida(SIGLA[$("#loja").value] || $("#loja").value)){
     $("#app").innerHTML =
       '<div class="loading" style="padding:26px 16px">' +
       '<p style="margin:0 0 8px;font-size:15px"><b>Nenhum item cadastrado para ' +
@@ -584,7 +590,7 @@ function ativarArrasto(){
     alvo = h.closest(".item");
     inicioY = e.clientY; desloc = 0;
     alvo.classList.add("pegando");
-    alvo.setPointerCapture(e.pointerId);
+    try{ alvo.setPointerCapture(e.pointerId); }catch(err){}
     e.preventDefault();
   });
 
@@ -655,20 +661,44 @@ async function salvarOrdem(){
   if (!mudou.length){ m.textContent = "A ordem não mudou."; return; }
 
   b.disabled = true; m.style.color = "var(--sub)"; m.textContent = "Salvando a ordem…";
+
+  // O campo OrdemEstoque de Insumos exige VALOR UNICO e so aceita inteiro.
+  // Reordenar e trocar numeros entre linhas, entao gravar direto bate em
+  // "unique constraints already has the provided value" e falha tudo.
+  // Solucao: estacionar os envolvidos bem acima do intervalo em uso e so
+  // depois dar o numero final -- ai nenhum choca com ninguem.
+  const maiorEmUso = Math.max(0, ...ITENS.map(i => typeof i.ordem === "number" ? i.ordem : 0));
+  const PARADA = maiorEmUso + 100000;
+
   let ok = 0, falhou = 0;
-  for (let i = 0; i < mudou.length; i += 5){
-    const r = await Promise.allSettled(mudou.slice(i, i + 5).map(x =>
-      gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: x.novo })));
-    r.forEach((x, k) => {
-      if (x.status === "fulfilled"){ ok++; mudou[i + k].it.ordem = mudou[i + k].novo; }
-      else falhou++;
-    });
-    m.textContent = "Salvando a ordem… " + (ok + falhou) + "/" + mudou.length;
-  }
-  m.textContent = falhou ? ("Ordem salva em " + ok + ", com " + falhou + " falha(s).")
-                         : ("Ordem salva: " + ok + " item(ns) mudaram de lugar.");
+  const emLotes = async (tarefas) => {
+    const saida = [];
+    for (let i = 0; i < tarefas.length; i += 5)
+      saida.push(...await Promise.allSettled(tarefas.slice(i, i + 5).map(f => f())));
+    return saida;
+  };
+
+  // etapa 1: libera os numeros
+  const estacionou = await emLotes(mudou.map((x, k) => () =>
+    gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: PARADA + k })));
+  const presos = [];
+  estacionou.forEach((r, k) => { if (r.status === "fulfilled") presos.push(mudou[k]); else falhou++; });
+
+  // etapa 2: entrega o numero definitivo
+  const final = await emLotes(presos.map(x => () =>
+    gravar(x.it.ordemLista, x.it.ordemId, { OrdemEstoque: x.novo })));
+  const encalhados = [];
+  final.forEach((r, k) => {
+    if (r.status === "fulfilled"){ ok++; presos[k].it.ordem = presos[k].novo; }
+    else { falhou++; encalhados.push(presos[k].it.code); }
+  });
+
+  m.textContent = !falhou
+    ? ("Ordem salva: " + ok + " item(ns) mudaram de lugar.")
+    : ("Ordem salva em " + ok + ", com " + falhou + " falha(s)" +
+       (encalhados.length ? " — refaça o arrasto de: " + encalhados.join(", ") : "") + ".");
   m.style.color = falhou ? "var(--verm)" : "var(--verde)";
-  ordemSuja = false; b.disabled = false;
+  ordemSuja = !!falhou; b.disabled = false; pintarBotaoOrdem();
 }
 
 function setQtd(code, v){
