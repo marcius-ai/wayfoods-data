@@ -158,7 +158,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v25</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v26</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -296,15 +296,21 @@ async function token(){
 // conta PESSOAL Microsoft com o mesmo endereço financeiro@domrubi.com.br, e
 // escolher ela dá AADSTS50020 ("does not exist in tenant"). Com o hint, o
 // Entra vai direto para o login da organização.
-function entrar(){
-  // prompt "login" e NAO "select_account": existe uma conta PESSOAL da
-  // Microsoft com o mesmo endereco financeiro@domrubi.com.br, e o seletor de
-  // contas oferecia justamente ela -- dai o AADSTS50020 repetido. Forcando
-  // autenticacao nova no endpoint do locatario, a sessao pessoal nao entra no
-  // meio. O domain_hint ainda pula a pergunta "pessoal ou corporativa".
-  msalApp.loginRedirect({ scopes: CFG.escopos,
-                          prompt: "login",
-                          extraQueryParameters: { domain_hint: "domrubi.com.br" } });
+function entrar(forcarSenha){
+  // Existe uma conta PESSOAL da Microsoft com o mesmo endereco
+  // financeiro@domrubi.com.br; o seletor de contas oferecia justamente ela,
+  // dai o AADSTS50020 repetido. O domain_hint pula a pergunta "pessoal ou
+  // corporativa", e o login_hint (quando ja conhecemos a conta) prende o
+  // endereco certo.
+  //
+  // prompt "login" obriga a digitar a senha. Isso so faz sentido no PRIMEIRO
+  // acesso do aparelho: na renovacao de sessao a conta ja esta fixada pelo
+  // login_hint, entao pedir senha toda vez seria so atrito.
+  const pedido = { scopes: CFG.escopos,
+                   extraQueryParameters: { domain_hint: "domrubi.com.br" } };
+  if (conta) pedido.loginHint = conta.username;
+  if (forcarSenha || !conta) pedido.prompt = "login";
+  msalApp.loginRedirect(pedido);
 }
 function sair(){ msalApp.logoutRedirect({ account: conta }); }
 
@@ -352,7 +358,8 @@ function tratarFalhaDeCarga(e){
       '<div style="margin-top:10px"><button id="btnSair2" style="padding:8px 14px;border-radius:9px;' +
       'border:1px solid var(--borda);background:#fff;color:var(--sub);font-family:inherit;font-size:13px">' +
       'Entrar com outra conta</button></div></div>';
-    $("#btnEntrar2").addEventListener("click", entrar);
+    // sessao expirada: a conta ja e conhecida, entao tenta sem pedir senha
+    $("#btnEntrar2").addEventListener("click", () => entrar(false));
     $("#btnSair2").addEventListener("click", () => {
       try{ Object.keys(localStorage).filter(k => /^(msal|\{")/.test(k)).forEach(k => localStorage.removeItem(k)); }catch(e){}
       msalApp.logoutRedirect({ postLogoutRedirectUri: location.origin + location.pathname });
@@ -610,6 +617,12 @@ function pintarFaixa(){
 }
 
 function render(){
+  // Sem dados carregados nao ha o que desenhar -- e, principalmente, nao se
+  // pode apagar a tela de "sessao expirou" que esta no lugar. Mexer no
+  // seletor de loja chamava render e trocava aquele aviso por um
+  // "loja sem cadastro" que nao tinha nada a ver.
+  if (!ITENS.length) return;
+
   // Loja sem nenhum cadastro de estoque: um aviso so, em vez de repetir a
   // mesma tarja em cada linha da lista.
   if (!lojaAtendida(SIGLA[$("#loja").value] || $("#loja").value)){
@@ -975,7 +988,7 @@ carregarEstado();
       (erroLogin ? '<div style="margin-top:16px;padding:10px 12px;border-radius:10px;background:#fdeaec;' +
         'border:1px solid var(--verm);color:var(--verm);font-size:13px;text-align:left">' + erroLogin + '</div>' : '') +
       '</div>';
-    $("#btnEntrar").addEventListener("click", entrar);
+    $("#btnEntrar").addEventListener("click", () => entrar(true));
     $("#btnSair").addEventListener("click", () => {
       // limpa o cache do MSAL deste aparelho e volta para a escolha de conta
       try{ Object.keys(localStorage).filter(k => /^(msal|\{")/.test(k)).forEach(k => localStorage.removeItem(k)); }catch(e){}
