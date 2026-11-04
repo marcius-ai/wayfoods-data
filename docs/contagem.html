@@ -59,6 +59,19 @@
   .organizando .alca{display:flex}
   .organizando .stepper{display:none}
   .organizando .item{padding:11px 14px}
+  .val{display:flex;align-items:center;gap:6px;margin-top:5px}
+  .val input{font-size:12px;padding:3px 6px;border:1px solid var(--borda);border-radius:7px;
+    background:#fff;color:var(--txt);font-family:inherit;max-width:142px}
+  .val .rotulo{font-size:11px;color:var(--sub)}
+  .selo{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px}
+  .selo.vence{background:#fff4de;color:#8a6100}
+  .selo.vencido{background:#fdeaec;color:var(--verm)}
+  .faixa{margin:10px 12px 0;padding:10px 12px;border-radius:11px;background:#fff4de;
+    border:1px solid #e8c97a;color:#8a6100;font-size:13px;font-weight:600;display:flex;
+    align-items:center;justify-content:space-between;gap:10px}
+  .faixa button{border:1px solid #e8c97a;background:#fff;color:#8a6100;border-radius:9px;
+    padding:6px 10px;font-family:inherit;font-size:12px;font-weight:700;white-space:nowrap}
+  .organizando .val{display:none}
   .item.pegando{box-shadow:0 10px 22px rgba(0,0,0,.18);border-radius:12px;position:relative;z-index:30;
     border-top-color:transparent;background:#fffdf6}
   .item .info{flex:1;min-width:0}
@@ -145,7 +158,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v24</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v25</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -198,12 +211,17 @@ const CFG = {
 
 const SIGLA = { "São José dos Campos": "SJC", "Suzano": "SZN" };
 const POR_PAGINA = 120;          // linhas desenhadas por vez
+// Antecedencia do alerta de validade. Um numero so, do jeito que o Marcius
+// pediu -- mudar aqui muda a tela inteira e nada mais.
+const AVISO_VALIDADE = 10;
 
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
 let ITENS = [];            // {code,nome,categoria,unidade,unidadeCurta,porcao,tipo,almox,ordem}
 let DEST  = {};            // "INS-001::SJC" -> id da linha de estoque
+let VALIDADE = {};         // "INS-001::SJC" -> "aaaa-mm-dd"
+let soVencendo = false;    // filtro "ver so o que esta vencendo"
 let estado = {};           // code -> quantidade (texto)
 let abaAtual = null;
 let tipoAtual = "insumo";
@@ -211,6 +229,7 @@ let LIDO_EM = null;
 let organizando = false;     // modo de arrastar ligado?
 let ordemSuja = false;       // mexeu e ainda nao salvou?
 const movidos = new Set();   // quem foi arrastado desde o ultimo salvamento
+const validadeSuja = new Set(); // validades digitadas e ainda nao gravadas
 const ORDEM_ALMOX = ["Congelado","Resfriado","Seco"];
 
 /* ----------------------------------------------------- identidade */
@@ -354,7 +373,7 @@ async function carregar(){
     lerLista("Insumos",               ["Title","field_1","field_2","field_3","Ativo"]),
     lerLista("Receitas",              ["Title","field_1","field_3","Ativa"]),
     lerLista("EstoquePorcionamentos", ["Title","field_1","field_3","field_4","Almoxarifado","OrdemEstoque","Unidade"]),
-    lerLista("EstoqueInsumos",        ["Title","Loja"]),
+    lerLista("EstoqueInsumos",        ["Title","Loja","Validade"]),
     // Quem manda na contagem do INSUMO e o InsumoPorUnidade: e la que vivem
     // ControlaEstoque, Almoxarifado e OrdemEstoque POR LOJA. O caminho fisico
     // de SJC nao e o de Suzano, entao a ordem tem mesmo de ser por loja.
@@ -365,8 +384,13 @@ async function carregar(){
   // A ponte código -> linha gravável. É isto que substitui a lista de Ids
   // chumbada: o que estiver cadastrado entra, o que não estiver aparece
   // marcado em vermelho na tela em vez de sumir calado.
-  DEST = {};
-  estIns.forEach(x => { if (x.Title) DEST["INS::" + x.Title + "::" + (SIGLA[val(x.Loja)] || val(x.Loja))] = x._id; });
+  DEST = {}; VALIDADE = {};
+  estIns.forEach(x => {
+    if (!x.Title) return;
+    const chave = x.Title + "::" + (SIGLA[val(x.Loja)] || val(x.Loja));
+    DEST["INS::" + chave] = x._id;
+    if (x.Validade) VALIDADE[chave] = String(x.Validade).slice(0, 10);
+  });
   por   .forEach(p => { if (p.Title) DEST["REC::" + p.Title + "::" + (val(p.Unidade) || "SJC")] = p._id; });
 
   // REGRA DE CONTAGEM (Marcius, 28/10): so entra na contagem quem tem
@@ -457,6 +481,32 @@ function marcarLojasSemCadastro(){
   });
 }
 
+// Validade so vale para insumo comprado: o preparo da casa tem validade
+// calculada pela conservacao, nao impressa na embalagem.
+function temValidade(it){ return it.tipo === "insumo"; }
+function validadeDe(it){ return VALIDADE[it.code + "::" + lojaAtual()] || ""; }
+
+function diasAte(iso){
+  if (!iso) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  return Math.round((new Date(iso + "T00:00:00") - hoje) / 86400000);
+}
+
+function seloValidade(iso){
+  const n = diasAte(iso);
+  if (n === null) return "";
+  if (n < 0)   return '<span class="selo vencido">vencido</span>';
+  if (n === 0) return '<span class="selo vencido">vence hoje</span>';
+  if (n <= AVISO_VALIDADE) return '<span class="selo vence">vence em ' + n + 'd</span>';
+  return "";
+}
+
+function vencendo(){
+  return ITENS.filter(i => temValidade(i) && i.loja === lojaAtual())
+              .map(i => ({ it: i, dias: diasAte(validadeDe(i)) }))
+              .filter(x => x.dias !== null && x.dias <= AVISO_VALIDADE);
+}
+
 function destinoDe(it){
   const sig = SIGLA[$("#loja").value] || $("#loja").value;
   return DEST[(it.tipo === "insumo" ? "INS::" : "REC::") + it.code + "::" + sig];
@@ -518,6 +568,11 @@ function linhaHTML(i){
     '<div class="info"><div class="nome">' + i.nome + '</div>' +
     '<div class="sub">' + sub + '</div>' +
     (gravavel(i) ? '' : '<div class="sub" style="color:var(--verm);font-weight:600">⚠ sem cadastro de estoque — NÃO será gravado</div>') +
+    (temValidade(i)
+      ? '<div class="val"><span class="rotulo">validade</span>' +
+        '<input type="date" data-val value="' + validadeDe(i) + '">' +
+        seloValidade(validadeDe(i)) + '</div>'
+      : '') +
     '</div>' +
     '<div class="stepper">' +
       '<button data-act="dec">−</button>' +
@@ -539,6 +594,21 @@ function desenharMais(){
     ? "mostrando " + desenhados + " de " + fila.length + "…" : "";
 }
 
+function pintarFaixa(){
+  const antiga = document.querySelector(".faixa");
+  if (antiga) antiga.remove();
+  const lista = vencendo();
+  if (!lista.length) return;
+  const venc = lista.filter(x => x.dias < 0).length;
+  const texto = venc
+    ? (venc + " vencido(s)" + (lista.length - venc ? " e " + (lista.length - venc) + " vencendo" : ""))
+    : (lista.length + " item(ns) vencem em até " + AVISO_VALIDADE + " dias");
+  $("#app").insertAdjacentHTML("afterbegin",
+    '<div class="faixa"><span>⚠ ' + texto + '</span>' +
+    '<button id="verVencendo">' + (soVencendo ? "Ver tudo" : "Ver") + '</button></div>');
+  $("#verVencendo").addEventListener("click", () => { soVencendo = !soVencendo; render(); });
+}
+
 function render(){
   // Loja sem nenhum cadastro de estoque: um aviso so, em vez de repetir a
   // mesma tarja em cada linha da lista.
@@ -556,10 +626,14 @@ function render(){
     atualizarContador();
     return;
   }
-  const todos = listaDoTipo();
+  let todos = listaDoTipo();
   // Todo item exibido tem sequencia (a regra garante), entao a ordem da tela
   // e a ordem fisica de caminhar pelo almoxarifado.
-  fila = todos.filter(i => !abaAtual || i.almox === abaAtual)
+  if (soVencendo){
+    const alvo = new Set(vencendo().map(x => x.it.code));
+    todos = todos.filter(i => alvo.has(i.code));   // ignora a aba: o que vence vem de qualquer local
+  }
+  fila = todos.filter(i => soVencendo || !abaAtual || i.almox === abaAtual)
               .sort((a,b) => (a.ordem - b.ordem) || a.nome.localeCompare(b.nome));
   desenhados = 0;
   const preench = fila.filter(i => estado[i.code]).length;
@@ -577,6 +651,7 @@ function render(){
     return atualizarContador();
   }
   $("#app").classList.remove("organizando");
+  pintarFaixa();
   desenharMais();
   // Desenhar tudo de uma vez trava o celular quando a lista passa de
   // algumas centenas. O resto entra conforme ela rola.
@@ -723,7 +798,7 @@ function setQtd(code, v){
 function atualizarContador(){
   const n = Object.keys(estado).length;
   $("#cont").textContent = n;
-  $("#salvar").disabled = n === 0;
+  $("#salvar").disabled = (n + validadeSuja.size) === 0;
 }
 
 /* ----------------------------------------------------- eventos */
@@ -738,8 +813,18 @@ $("#app").addEventListener("click", e => {
   setQtd(code, inp.value);
 });
 $("#app").addEventListener("input", e => {
-  if (!e.target.classList.contains("qty")) return;
-  setQtd(e.target.closest(".item").dataset.code, e.target.value);
+  if (e.target.classList.contains("qty"))
+    return setQtd(e.target.closest(".item").dataset.code, e.target.value);
+  if (!e.target.hasAttribute("data-val")) return;
+  const item = e.target.closest(".item"), code = item.dataset.code;
+  const chave = code + "::" + lojaAtual();
+  if (e.target.value) VALIDADE[chave] = e.target.value; else delete VALIDADE[chave];
+  validadeSuja.add(code);
+  const caixa = item.querySelector(".val");
+  const selo = caixa.querySelector(".selo");
+  if (selo) selo.remove();
+  caixa.insertAdjacentHTML("beforeend", seloValidade(e.target.value));
+  atualizarContador(); pintarFaixa();
 });
 $("#tabs").addEventListener("click", e => {
   const t = e.target.closest(".tab"); if (!t) return;
@@ -764,6 +849,7 @@ $("#salvar").addEventListener("click", () => {
     return { Item: code, Tipo: it.tipo === "insumo" ? "Insumo" : "Preparo",
              Quantidade: parseFloat(estado[code]), Unidade: it.unidade };
   });
+  const validades = validadeSuja.size;
   const semDestino = Object.keys(estado).filter(c => {
     const it = ITENS.find(i => i.code === c); return it && !gravavel(it);
   });
@@ -772,6 +858,7 @@ $("#salvar").addEventListener("click", () => {
     'Loja: <b style="color:var(--verde)">' + $("#loja").value + '</b>' +
     '<br>Data: <b>' + d + '/' + m + '/' + a + '</b> · <b>' + linhas.length + '</b> itens' +
     '<br>Gravando como: <b>' + ((conta && conta.username) || "—") + '</b>' +
+    (validades ? '<br><b>' + validades + '</b> validade(s) informada(s)' : '') +
     (semDestino.length ? '<br><span style="color:var(--verm);font-weight:600">⚠ ' + semDestino.length +
       ' sem cadastro de estoque — não serão gravados</span>' : '');
   $("#payload").textContent = JSON.stringify(
@@ -787,14 +874,29 @@ async function enviar(){
   const st = $("#envioStatus"), btn = $("#btnEnviar");
   const iso = new Date().toISOString();
   const tarefas = [], ignorados = [];
-  Object.keys(estado).forEach(code => {
-    const it = ITENS.find(i => i.code === code); if (!it) return;
+  // Quem foi contado E quem so teve a validade mexida entram na mesma leva.
+  const alvos = new Set([...Object.keys(estado), ...validadeSuja]);
+  alvos.forEach(code => {
+    const it = ITENS.find(i => i.code === code && i.loja === lojaAtual())
+            || ITENS.find(i => i.code === code);
+    if (!it) return;
     const id = destinoDe(it);
     if (!id){ ignorados.push(code); return; }
-    const qtd = parseFloat((estado[code] + "").replace(",", ".")) || 0;
-    tarefas.push(it.tipo === "insumo"
-      ? { lista: "EstoqueInsumos",        id, campos: { EstoqueAtual: qtd, DataContagem: iso } }
-      : { lista: "EstoquePorcionamentos", id, campos: { field_5: qtd } });
+    if (it.tipo === "insumo"){
+      const campos = {};
+      if (estado[code] !== undefined){
+        campos.EstoqueAtual = parseFloat((estado[code] + "").replace(",", ".")) || 0;
+        campos.DataContagem = iso;
+      }
+      if (validadeSuja.has(code)){
+        const v = VALIDADE[code + "::" + lojaAtual()];
+        campos.Validade = v ? v + "T00:00:00Z" : null;
+      }
+      if (Object.keys(campos).length) tarefas.push({ lista: "EstoqueInsumos", id, campos });
+    } else if (estado[code] !== undefined){
+      tarefas.push({ lista: "EstoquePorcionamentos", id,
+                     campos: { field_5: parseFloat((estado[code] + "").replace(",", ".")) || 0 } });
+    }
   });
   if (!tarefas.length){ st.textContent = "Nada para gravar."; st.style.color = "var(--sub)"; return; }
 
@@ -820,7 +922,7 @@ async function enviar(){
       : "");
   st.style.color = "var(--verde)";
   if (ok && !falhou){
-    estado = {}; salvarEstado(); render();
+    estado = {}; validadeSuja.clear(); salvarEstado(); render();
   }
   btn.disabled = false;
 }
