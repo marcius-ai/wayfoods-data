@@ -162,7 +162,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v27</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v28</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -225,6 +225,7 @@ const $$ = s => document.querySelectorAll(s);
 let ITENS = [];            // {code,nome,categoria,unidade,unidadeCurta,porcao,tipo,almox,ordem}
 let DEST  = {};            // "INS-001::SJC" -> id da linha de estoque
 let VALIDADE = {};         // "INS-001::SJC" -> "aaaa-mm-dd"
+let INFORMADA = {};        // "INS-001::SJC" -> quando alguem afirmou essa data
 let soVencendo = false;    // filtro "ver so o que esta vencendo"
 let estado = {};           // code -> quantidade (texto)
 let abaAtual = null;
@@ -384,7 +385,7 @@ async function carregar(){
     lerLista("Insumos",               ["Title","field_1","field_2","field_3","Ativo"]),
     lerLista("Receitas",              ["Title","field_1","field_3","Ativa"]),
     lerLista("EstoquePorcionamentos", ["Title","field_1","field_3","field_4","Almoxarifado","OrdemEstoque","Unidade"]),
-    lerLista("EstoqueInsumos",        ["Title","Loja","Validade"]),
+    lerLista("EstoqueInsumos",        ["Title","Loja","Validade","ValidadeInformadaEm"]),
     // Quem manda na contagem do INSUMO e o InsumoPorUnidade: e la que vivem
     // ControlaEstoque, Almoxarifado e OrdemEstoque POR LOJA. O caminho fisico
     // de SJC nao e o de Suzano, entao a ordem tem mesmo de ser por loja.
@@ -395,12 +396,13 @@ async function carregar(){
   // A ponte código -> linha gravável. É isto que substitui a lista de Ids
   // chumbada: o que estiver cadastrado entra, o que não estiver aparece
   // marcado em vermelho na tela em vez de sumir calado.
-  DEST = {}; VALIDADE = {};
+  DEST = {}; VALIDADE = {}; INFORMADA = {};
   estIns.forEach(x => {
     if (!x.Title) return;
     const chave = x.Title + "::" + (SIGLA[val(x.Loja)] || val(x.Loja));
     DEST["INS::" + chave] = x._id;
     if (x.Validade) VALIDADE[chave] = String(x.Validade).slice(0, 10);
+    if (x.ValidadeInformadaEm) INFORMADA[chave] = String(x.ValidadeInformadaEm).slice(0, 10);
   });
   por   .forEach(p => { if (p.Title) DEST["REC::" + p.Title + "::" + (val(p.Unidade) || "SJC")] = p._id; });
 
@@ -496,6 +498,8 @@ function marcarLojasSemCadastro(){
 // calculada pela conservacao, nao impressa na embalagem.
 function temValidade(it){ return it.tipo === "insumo"; }
 function validadeDe(it){ return VALIDADE[it.code + "::" + lojaAtual()] || ""; }
+function informadaEm(it){ return INFORMADA[it.code + "::" + lojaAtual()] || ""; }
+const diaMes = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "";
 
 function diasAte(iso){
   if (!iso) return null;
@@ -510,9 +514,17 @@ function diasAte(iso){
 function blocoValidade(i){
   const data = validadeDe(i);
   const tocado = validadeSuja.has(i.code);
-  return '<span class="rotulo">validade</span>' +
+  const quando = informadaEm(i);
+  // "primeiro a vencer" e nao "validade": o que se pede e a data do lote que
+  // vence antes, nao a do produto em geral. E mostrar DESDE QUANDO aquela
+  // data esta ali e o que impede o confirmar virar piloto automatico --
+  // chegou lote novo, a data antiga pode ser de caixa que ja saiu.
+  return '<span class="rotulo">1º a vencer</span>' +
          '<input type="date" data-val value="' + data + '">' +
-         (data && !tocado ? '<button class="conf" data-conf>✓ confirmar</button>' : '') +
+         (data && !tocado
+            ? '<button class="conf" data-conf>✓ confirmar</button>' +
+              (quando ? '<span class="rotulo">informada em ' + diaMes(quando) + '</span>' : '')
+            : '') +
          (tocado ? '<span class="selo ok">conferido</span>' : '') +
          seloValidade(data);
 }
@@ -929,6 +941,9 @@ async function enviar(){
       if (validadeSuja.has(code)){
         const v = VALIDADE[code + "::" + lojaAtual()];
         campos.Validade = v ? v + "T00:00:00Z" : null;
+        // carimba QUANDO alguem afirmou essa data: e isso que separa
+        // "conferi hoje" de "esta data esta parada aqui desde agosto"
+        campos.ValidadeInformadaEm = v ? iso : null;
       }
       if (Object.keys(campos).length) tarefas.push({ lista: "EstoqueInsumos", id, campos });
     } else if (estado[code] !== undefined){
