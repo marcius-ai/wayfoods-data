@@ -63,6 +63,10 @@
   .val input{font-size:12px;padding:3px 6px;border:1px solid var(--borda);border-radius:7px;
     background:#fff;color:var(--txt);font-family:inherit;max-width:142px}
   .val .rotulo{font-size:11px;color:var(--sub)}
+  .val .conf{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;
+    border:1px solid var(--verde);background:#fff;color:var(--verde);font-family:inherit}
+  .val .conf:active{background:var(--verde);color:#fff}
+  .selo.ok{background:#e8f3e8;color:var(--verde)}
   .selo{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px}
   .selo.vence{background:#fff4de;color:#8a6100}
   .selo.vencido{background:#fdeaec;color:var(--verm)}
@@ -158,7 +162,7 @@
 
 <footer>
   <div class="footwrap">
-    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v26</span></div>
+    <div class="stat"><b id="cont">0</b> itens contados · <span class="saved-pill" id="savedPill"></span> <span id="selo" style="font-size:10px;opacity:.75"></span> <span style="opacity:.4;font-size:10px">v27</span></div>
     <button class="btn" id="salvar" disabled>Revisar</button>
   </div>
 </footer>
@@ -499,6 +503,20 @@ function diasAte(iso){
   return Math.round((new Date(iso + "T00:00:00") - hoje) / 86400000);
 }
 
+// A data que ja estava gravada vem preenchida: na prateleira, quase sempre
+// e a mesma de antes, e redigitar seria perda de tempo. O que muda e que
+// deixar como esta nao prova nada -- por isso o toque em "confirmar", que
+// regrava a data e marca que alguem olhou nesta contagem.
+function blocoValidade(i){
+  const data = validadeDe(i);
+  const tocado = validadeSuja.has(i.code);
+  return '<span class="rotulo">validade</span>' +
+         '<input type="date" data-val value="' + data + '">' +
+         (data && !tocado ? '<button class="conf" data-conf>✓ confirmar</button>' : '') +
+         (tocado ? '<span class="selo ok">conferido</span>' : '') +
+         seloValidade(data);
+}
+
 function seloValidade(iso){
   const n = diasAte(iso);
   if (n === null) return "";
@@ -575,11 +593,7 @@ function linhaHTML(i){
     '<div class="info"><div class="nome">' + i.nome + '</div>' +
     '<div class="sub">' + sub + '</div>' +
     (gravavel(i) ? '' : '<div class="sub" style="color:var(--verm);font-weight:600">⚠ sem cadastro de estoque — NÃO será gravado</div>') +
-    (temValidade(i)
-      ? '<div class="val"><span class="rotulo">validade</span>' +
-        '<input type="date" data-val value="' + validadeDe(i) + '">' +
-        seloValidade(validadeDe(i)) + '</div>'
-      : '') +
+    (temValidade(i) ? '<div class="val">' + blocoValidade(i) + '</div>' : '') +
     '</div>' +
     '<div class="stepper">' +
       '<button data-act="dec">−</button>' +
@@ -599,6 +613,12 @@ function desenharMais(){
   const fim = $("#fim");
   if (fim) fim.textContent = desenhados < fila.length
     ? "mostrando " + desenhados + " de " + fila.length + "…" : "";
+}
+
+function redesenharValidade(item, code){
+  const it = ITENS.find(i => i.code === code && i.loja === lojaAtual());
+  const caixa = item.querySelector(".val");
+  if (it && caixa) caixa.innerHTML = blocoValidade(it);
 }
 
 function pintarFaixa(){
@@ -816,6 +836,14 @@ function atualizarContador(){
 
 /* ----------------------------------------------------- eventos */
 $("#app").addEventListener("click", e => {
+  const conf = e.target.closest("[data-conf]");
+  if (conf){
+    const item = conf.closest(".item"), code = item.dataset.code;
+    validadeSuja.add(code);              // regrava a mesma data, agora com hoje
+    redesenharValidade(item, code);
+    atualizarContador(); pintarFaixa();
+    return;
+  }
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   const item = b.closest(".item"), code = item.dataset.code;
@@ -833,10 +861,7 @@ $("#app").addEventListener("input", e => {
   const chave = code + "::" + lojaAtual();
   if (e.target.value) VALIDADE[chave] = e.target.value; else delete VALIDADE[chave];
   validadeSuja.add(code);
-  const caixa = item.querySelector(".val");
-  const selo = caixa.querySelector(".selo");
-  if (selo) selo.remove();
-  caixa.insertAdjacentHTML("beforeend", seloValidade(e.target.value));
+  redesenharValidade(item, code);
   atualizarContador(); pintarFaixa();
 });
 $("#tabs").addEventListener("click", e => {
